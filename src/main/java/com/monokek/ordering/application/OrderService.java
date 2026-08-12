@@ -5,6 +5,7 @@ import com.monokek.catalog.ProductCatalog;
 import com.monokek.common.ApiException;
 import com.monokek.floorplan.TableDirectory;
 import com.monokek.identity.UserDirectory;
+import com.monokek.pms.PmsClient;
 import com.monokek.ordering.domain.*;
 import com.monokek.ordering.domain.event.KitchenTicketRequestedEvent;
 import com.monokek.ordering.domain.event.OrderPaidEvent;
@@ -57,6 +58,7 @@ public class OrderService {
     private final UserDirectory userDirectory;
     private final CommissionService commissionService;
     private final ApplicationEventPublisher events;
+    private final PmsClient pmsClient;
 
     public OrderService(
             OrderRepository orderRepository,
@@ -66,7 +68,8 @@ public class OrderService {
             CashierFacade cashierFacade,
             UserDirectory userDirectory,
             CommissionService commissionService,
-            ApplicationEventPublisher events) {
+            ApplicationEventPublisher events,
+            PmsClient pmsClient) {
         this.orderRepository = orderRepository;
         this.orderRoundRepository = orderRoundRepository;
         this.productCatalog = productCatalog;
@@ -75,6 +78,7 @@ public class OrderService {
         this.userDirectory = userDirectory;
         this.commissionService = commissionService;
         this.events = events;
+        this.pmsClient = pmsClient;
     }
 
     @Transactional
@@ -184,11 +188,18 @@ public class OrderService {
     }
 
     @Transactional
-    public void finalizePayment(UUID orderUuid, FinalizePaymentRequest request, Long cashierUserId) {
+    public void finalizePayment(UUID orderUuid, FinalizePaymentRequest request, Long cashierUserId, String bearerToken) {
         Long sessionId = cashierFacade.findOpenSessionId(cashierUserId)
                 .orElseThrow(() -> ApiException.forbidden("Caisse fermée"));
 
         Order order = orderRepository.findByUuid(orderUuid).orElseThrow(() -> ApiException.notFound("Commande introuvable."));
+
+        if ("room_charge".equalsIgnoreCase(request.paymentMethod())) {
+            // Billed to the guest's pms folio before touching any local state here:
+            // if pms-modulith rejects or is unreachable, the order stays unpaid and
+            // the cashier can retry, instead of silently losing the room charge.
+            chargeToGuestRoom(order, request.roomNumber(), bearerToken);
+        }
 
         CashierFacade.PaymentResult payment =
                 cashierFacade.recordPayment(order.getId(), sessionId, request.paymentMethod(), order.getTotal(), request.amountReceived());
@@ -203,6 +214,15 @@ public class OrderService {
         }
 
         events.publishEvent(toOrderPaidEvent(order, request.paymentMethod(), request.amountReceived(), payment.changeDue()));
+    }
+
+    /** Confirms the room is occupied, then bills this order's total to that stay's folio in pms-modulith. */
+    private void chargeToGuestRoom(Order order, String roomNumber, String bearerToken) {
+        if (roomNumber == null || roomNumber.isBlank()) {
+            throw ApiException.badRequest("Le numéro de chambre est requis pour un paiement \"Chambre\".");
+        }
+        Long bookingId = pmsClient.checkRoomAndGetBookingId(roomNumber.trim(), bearerToken);
+        pmsClient.chargeToRoom(bookingId, order.getTotal(), order.getReference(), bearerToken);
     }
 
     /**

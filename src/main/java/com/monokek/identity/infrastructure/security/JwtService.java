@@ -31,11 +31,12 @@ public class JwtService {
         this.ttlMinutes = ttlMinutes;
     }
 
-    public String generateToken(Long userId, UUID userUuid, List<String> roles, List<String> permissions) {
+    public String generateToken(Long userId, UUID userUuid, String name, List<String> roles, List<String> permissions) {
         Instant now = Instant.now();
         return Jwts.builder()
                 .subject(userId.toString())
                 .claim("uuid", userUuid.toString())
+                .claim("name", name)
                 .claim("roles", roles)
                 .claim("permissions", permissions)
                 .issuedAt(java.util.Date.from(now))

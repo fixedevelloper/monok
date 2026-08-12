@@ -8,6 +8,7 @@ import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.http.HttpHeaders;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -35,8 +36,10 @@ public class OrderController {
 
     @PostMapping("/api/pos/orders/{uuid}/finalize")
     public ApiResponse<Void> finalizePayment(
-            @PathVariable UUID uuid, @Valid @RequestBody FinalizePaymentRequest request, @AuthenticationPrincipal CurrentUser principal) {
-        orderService.finalizePayment(uuid, request, principal.id());
+            @PathVariable UUID uuid, @Valid @RequestBody FinalizePaymentRequest request,
+            @AuthenticationPrincipal CurrentUser principal,
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String authorization) {
+        orderService.finalizePayment(uuid, request, principal.id(), authorization);
         return ApiResponse.success(null, "Payé");
     }
 

@@ -63,6 +63,7 @@ public class AuthService {
         String token = jwtService.generateToken(
                 user.getId(),
                 user.getUuid(),
+                user.getName(),
                 user.getRoles().stream().map(Role::getName).toList(),
                 user.getAllPermissionNames().stream().toList()
         );

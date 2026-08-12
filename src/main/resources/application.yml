@@ -52,7 +52,7 @@ app:
     # Tauri desktop build's fixed webview origin (Linux/macOS vs Windows
     # spell it differently) — see SecurityConfig for why this isn't "*".
     # Override with CORS_ALLOWED_ORIGINS for a production web deployment.
-    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,tauri://localhost,http://tauri.localhost,https://tauri.localhost}
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:3001,tauri://localhost,http://tauri.localhost,https://tauri.localhost}
 
   security:
     # SecretsValidator refuses to start the app if app.jwt.secret or
@@ -76,6 +76,11 @@ app:
     # deployment you ship: LicenseKeyGeneratorTool signs keys once with it, and every
     # instance verifies against this same secret. Override with LICENSE_SIGNING_KEY.
     signing-key: ${LICENSE_SIGNING_KEY:change-me-license-signing-key-change-me-32}
+
+  pms:
+    # Base URL of the separate pms-modulith service — see the `pms` module
+    # (PmsClientService). Override with PMS_API_URL in every real environment.
+    api-url: ${PMS_API_URL:http://localhost:8081/api/v1}
 
 server:
   port: ${SERVER_PORT:8080}
