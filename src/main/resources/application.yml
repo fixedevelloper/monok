@@ -1,0 +1,85 @@
+spring:
+  application:
+    name: monokek-spring
+
+  datasource:
+    url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_DATABASE:monokek}?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true
+    username: ${DB_USERNAME:base}
+    password: ${DB_PASSWORD:ba001133}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: false
+        jdbc:
+          time_zone: UTC
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+  modulith:
+    events:
+      # The EVENT_PUBLICATION table is created by Flyway (V5__add_event_publication.sql)
+      # instead — Spring Modulith's own auto-init silently never ran once Flyway
+      # was detected managing the schema, which left every event publication
+      # broken. Flyway is the single source of truth for schema here, same as
+      # everything else in this project.
+      jdbc-schema-initialization:
+        enabled: false
+
+  servlet:
+    multipart:
+      # Défauts Spring Boot (1MB) trop bas pour une image — StorageService
+      # applique elle-même la vraie limite métier (5 Mo).
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+app:
+  jwt:
+    # Same purpose as Laravel's APP_KEY / Sanctum tokens: sign & verify access tokens.
+    # Override with the JWT_SECRET env var in every real environment.
+    secret: ${JWT_SECRET:change-me-change-me-change-me-change-me-32}
+    access-token-ttl-minutes: ${JWT_TTL_MINUTES:480}
+
+  cors:
+    # Comma-separated. Defaults cover the Next.js dev server and a packaged
+    # Tauri desktop build's fixed webview origin (Linux/macOS vs Windows
+    # spell it differently) — see SecurityConfig for why this isn't "*".
+    # Override with CORS_ALLOWED_ORIGINS for a production web deployment.
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,tauri://localhost,http://tauri.localhost,https://tauri.localhost}
+
+  security:
+    # SecretsValidator refuses to start the app if app.jwt.secret or
+    # app.license.signing-key are still at their hardcoded placeholder
+    # value below. Set to true only for quick, throwaway local testing.
+    allow-default-secrets: ${ALLOW_DEFAULT_SECRETS:false}
+
+  minio:
+    # docker-compose.yml runs a local MinIO on 9000 (API) / 9001 (console).
+    endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+    # Base URL baked into every returned upload URL — override if clients reach
+    # MinIO through a different host/port than the backend does (e.g. behind a proxy).
+    public-endpoint: ${MINIO_PUBLIC_ENDPOINT:${app.minio.endpoint}}
+    access-key: ${MINIO_ACCESS_KEY:minioadmin}
+    secret-key: ${MINIO_SECRET_KEY:minioadmin}
+    bucket: ${MINIO_BUCKET:monokek}
+
+  license:
+    # Vendor-side signing key for offline license verification. Unlike app.jwt.secret
+    # (unique per deployment), this MUST be the exact same value across every
+    # deployment you ship: LicenseKeyGeneratorTool signs keys once with it, and every
+    # instance verifies against this same secret. Override with LICENSE_SIGNING_KEY.
+    signing-key: ${LICENSE_SIGNING_KEY:change-me-license-signing-key-change-me-32}
+
+server:
+  port: ${SERVER_PORT:8080}
+
+logging:
+  level:
+    org.springframework.modulith: INFO

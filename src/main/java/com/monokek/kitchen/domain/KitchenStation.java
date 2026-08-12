@@ -1,0 +1,35 @@
+package com.monokek.kitchen.domain;
+
+import com.monokek.common.Timestamps;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+@Entity
+@Table(name = "kitchen_stations")
+@Getter
+@Setter
+@NoArgsConstructor
+public class KitchenStation extends Timestamps {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    /** References company.Branch by id only — see module package-info. */
+    private Long branchId;
+
+    private String name;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "type", nullable = false)
+    private StationType type = StationType.KITCHEN;
+}
