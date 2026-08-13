@@ -43,9 +43,12 @@ public record StaffDto(
         );
     }
 
-    public record RoleOption(Long id, String name) {
+    public record RoleOption(Long id, String name, List<String> permissions) {
         public static RoleOption from(Role role) {
-            return new RoleOption(role.getId(), role.getName());
+            return new RoleOption(
+                    role.getId(),
+                    role.getName(),
+                    role.getPermissions().stream().map(Permission::getName).toList());
         }
     }
 
