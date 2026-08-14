@@ -2,11 +2,13 @@ package com.monokek.identity;
 
 /**
  * Published interface: the only thing other modules should know about
- * "who's making this request" — never the full {@code identity.domain.User}
- * aggregate. Bind it directly with {@code @AuthenticationPrincipal CurrentUser
- * principal} in any module's controller; Spring resolves it against the real
- * runtime principal (identity.infrastructure.security.AuthenticatedUser)
- * because that class implements this interface.
+ * "who's making this request" — the actual user record lives in
+ * monokek-identity now, not this app. Bind it directly with
+ * {@code @AuthenticationPrincipal CurrentUser principal} in any module's
+ * controller; Spring resolves it against the real runtime principal
+ * (identity.infrastructure.security.JwtCurrentUser, built straight from the
+ * bearer JWT's claims — see JwtToCurrentUserConverter) because that class
+ * implements this interface.
  */
 public interface CurrentUser {
 

@@ -3,11 +3,13 @@ package com.monokek.identity.infrastructure.client;
 import com.monokek.common.ApiException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 
@@ -29,7 +31,14 @@ class IdentityTokenClient {
             @Value("${app.identity.token-uri}") String tokenUri,
             @Value("${app.identity.client-id}") String clientId,
             @Value("${app.identity.client-secret}") String clientSecret) {
-        this.restClient = RestClient.builder().baseUrl(tokenUri).build();
+        // Bounded, same reasoning as printing.infrastructure.LogoImageLoader's 3s fetch
+        // timeout: accessToken() is synchronized, so an unbounded hang here would queue
+        // up every other thread doing a name lookup behind it — a slow/unreachable
+        // monokek-identity must degrade to a bounded delay, not a stall.
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(Duration.ofSeconds(3));
+        requestFactory.setReadTimeout(Duration.ofSeconds(5));
+        this.restClient = RestClient.builder().baseUrl(tokenUri).requestFactory(requestFactory).build();
         this.clientId = clientId;
         this.clientSecret = clientSecret;
     }
@@ -47,6 +56,9 @@ class IdentityTokenClient {
                     .body("grant_type=client_credentials&scope=internal.users.read")
                     .retrieve()
                     .body(Map.class);
+            if (response == null || response.get("access_token") == null || response.get("expires_in") == null) {
+                throw ApiException.serviceUnavailable("Le service d'identité est injoignable pour le moment.");
+            }
             String token = (String) response.get("access_token");
             int expiresIn = ((Number) response.get("expires_in")).intValue();
             // Refresh a bit early so a request never races an about-to-expire token.

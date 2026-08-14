@@ -46,6 +46,9 @@ app:
     # see com.monokek.identity.infrastructure.security.SecurityConfig. No shared
     # secret anymore: JWKS is fetched (and cached) over HTTP.
     jwk-set-uri: ${IDENTITY_JWK_SET_URI:http://localhost:8082/oauth2/jwks}
+    # Must match monokek-identity's own app.identity.issuer exactly — checked against
+    # every token's "iss" claim (see SecurityConfig.jwtDecoder), not just used as a label.
+    issuer: ${IDENTITY_ISSUER:http://localhost:8082}
     # Used by HttpUserDirectory (GET /internal/users) via a client_credentials token.
     api-url: ${IDENTITY_API_URL:http://localhost:8082}
     token-uri: ${IDENTITY_TOKEN_URI:http://localhost:8082/oauth2/token}

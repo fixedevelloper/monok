@@ -18,6 +18,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
@@ -68,6 +69,9 @@ public class SecurityConfig {
     @Value("${app.identity.jwk-set-uri}")
     private String jwkSetUri;
 
+    @Value("${app.identity.issuer}")
+    private String issuer;
+
     public SecurityConfig(JwtToCurrentUserConverter jwtToCurrentUserConverter, ObjectMapper objectMapper) {
         this.jwtToCurrentUserConverter = jwtToCurrentUserConverter;
         this.objectMapper = objectMapper;
@@ -75,7 +79,13 @@ public class SecurityConfig {
 
     @Bean
     public JwtDecoder jwtDecoder() {
-        return NimbusJwtDecoder.withJwkSetUri(jwkSetUri).build();
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(jwkSetUri).build();
+        // Signature-only validation would accept any token signed by a key in this JWKS
+        // document, regardless of which issuer it claims to be — checking "iss" against
+        // our own configured value is what actually makes IDENTITY_ISSUER a security
+        // property instead of just a label.
+        decoder.setJwtValidator(JwtValidators.createDefaultWithIssuer(issuer));
+        return decoder;
     }
 
     @Bean

@@ -1,7 +1,10 @@
 package com.monokek.identity.infrastructure.client;
 
 import com.monokek.identity.UserDirectory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -22,10 +25,17 @@ import java.util.stream.Collectors;
  * client_credentials token (see IdentityTokenClient). Short-TTL cache: other
  * modules call this on every order/session listing just to show a name, so this
  * avoids a network round-trip per request without risking a long-stale name.
+ *
+ * <p>A display name is a nicety, not something an order/cash-register listing
+ * should ever 500 over — unlike the old local JPA query (which essentially
+ * couldn't fail on its own), a slow/unreachable monokek-identity now can, so
+ * every failure here is bounded (timeout) and degrades to omitting the missing
+ * names rather than propagating.
  */
 @Component
 class HttpUserDirectory implements UserDirectory {
 
+    private static final Logger log = LoggerFactory.getLogger(HttpUserDirectory.class);
     private static final Duration TTL = Duration.ofMinutes(2);
 
     private final RestClient restClient;
@@ -33,7 +43,10 @@ class HttpUserDirectory implements UserDirectory {
     private final ConcurrentHashMap<Long, CachedName> cache = new ConcurrentHashMap<>();
 
     HttpUserDirectory(@Value("${app.identity.api-url}") String apiUrl, IdentityTokenClient tokenClient) {
-        this.restClient = RestClient.builder().baseUrl(apiUrl).build();
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(Duration.ofSeconds(3));
+        requestFactory.setReadTimeout(Duration.ofSeconds(5));
+        this.restClient = RestClient.builder().baseUrl(apiUrl).requestFactory(requestFactory).build();
         this.tokenClient = tokenClient;
     }
 
@@ -53,21 +66,28 @@ class HttpUserDirectory implements UserDirectory {
         }
 
         if (!missing.isEmpty()) {
-            String idsParam = missing.stream().map(String::valueOf).collect(Collectors.joining(","));
+            fetch(missing).forEach((id, name) -> {
+                cache.put(id, new CachedName(name, now.plus(TTL)));
+                result.put(id, name);
+            });
+        }
+
+        return result;
+    }
+
+    private Map<Long, String> fetch(List<Long> ids) {
+        try {
+            String idsParam = ids.stream().map(String::valueOf).collect(Collectors.joining(","));
             UserNamesResponse response = restClient.get()
                     .uri(uriBuilder -> uriBuilder.path("/internal/users").queryParam("ids", idsParam).build())
                     .headers(headers -> headers.setBearerAuth(tokenClient.accessToken()))
                     .retrieve()
                     .body(UserNamesResponse.class);
-            if (response != null) {
-                response.names().forEach((id, name) -> {
-                    cache.put(id, new CachedName(name, now.plus(TTL)));
-                    result.put(id, name);
-                });
-            }
+            return response == null ? Map.of() : response.names();
+        } catch (Exception e) {
+            log.warn("Impossible de récupérer les noms d'utilisateurs depuis monokek-identity: {}", e.getMessage());
+            return Map.of();
         }
-
-        return result;
     }
 
     private record CachedName(String name, Instant expiresAt) {

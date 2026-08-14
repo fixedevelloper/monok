@@ -16,6 +16,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Application service: port of {@code App\Http\Controllers\Api\Pos\CashController}.
@@ -49,7 +50,26 @@ public class CashierService {
     @Transactional(readOnly = true)
     public List<CashRegisterDto> listRegisters(Long branchId) {
         List<CashRegister> registers = branchId == null ? cashRegisterRepository.findAll() : cashRegisterRepository.findByBranchId(branchId);
-        return registers.stream().map(this::toRegisterDto).toList();
+
+        // One namesByIds call for the whole list, not one per register (toRegisterDto's own
+        // call is fine for the single-register call sites below, but here it would mean one
+        // HTTP round-trip to monokek-identity per open register — see HttpUserDirectory).
+        List<CashSession> openSessions = cashSessionRepository.findByRegisterIdInAndClosedAtIsNull(
+                registers.stream().map(CashRegister::getId).toList());
+        Map<Long, CashSession> openSessionByRegisterId = openSessions.stream()
+                .collect(Collectors.toMap(session -> session.getRegister().getId(), session -> session));
+        Map<Long, String> namesByUserId = userDirectory.namesByIds(
+                openSessions.stream().map(CashSession::getUserId).collect(Collectors.toSet()));
+
+        return registers.stream()
+                .map(register -> {
+                    CashSession session = openSessionByRegisterId.get(register.getId());
+                    return session == null
+                            ? new CashRegisterDto(register.getId(), register.getBranchId(), register.getName(), false, null)
+                            : new CashRegisterDto(register.getId(), register.getBranchId(), register.getName(),
+                                    true, namesByUserId.get(session.getUserId()));
+                })
+                .toList();
     }
 
     /** {@code callerBranchId} null means the caller has no assigned branch (owner/super-admin) —
