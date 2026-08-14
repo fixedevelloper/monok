@@ -19,7 +19,7 @@ import java.util.List;
  * Aggregate root: port of the cash-session lifecycle Laravel spreads across
  * {@code CashController::open}/{@code close}. Stages
  * {@link CashSessionOpenedEvent}/{@link CashSessionClosedEvent} via
- * {@code @DomainEvents} — see {@code identity.domain.User} for why this
+ * {@code @DomainEvents} — see monokek-identity's {@code User} aggregate for why this
  * hook is used instead of {@code AbstractAggregateRoot} (already extends
  * {@code Timestamps}).
  */
@@ -37,7 +37,7 @@ public class CashSession extends Timestamps {
     @JoinColumn(name = "register_id", nullable = false)
     private CashRegister register;
 
-    /** References identity.User by id only. */
+    /** References the user id issued in the JWT (see identity.CurrentUser) — the user itself now lives in monokek-identity, not this app. */
     @Column(name = "user_id", nullable = false)
     private Long userId;
 

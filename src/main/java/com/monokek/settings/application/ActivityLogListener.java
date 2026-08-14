@@ -39,24 +39,31 @@ public class ActivityLogListener {
         this.activityLogRepository = activityLogRepository;
     }
 
+    // These four are public, unlike the rest of this class's listeners: monokek-identity
+    // now originates staff/login activity in a separate process, so
+    // settings.web.InternalActivityLogController calls them directly from its webhook
+    // handler instead of through the (necessarily in-process only) Spring Modulith event
+    // bus. @ApplicationModuleListener is harmless to leave on — nothing publishes these
+    // event types in-process anymore, so it simply never fires that way.
+
     @ApplicationModuleListener
-    void on(UserLoggedInEvent event) {
+    public void on(UserLoggedInEvent event) {
         record(event.userId(), "Connexion depuis '%s'".formatted(
                 event.deviceName() == null ? "appareil inconnu" : event.deviceName()));
     }
 
     @ApplicationModuleListener
-    void on(StaffCreatedEvent event) {
+    public void on(StaffCreatedEvent event) {
         record(event.userId(), "Membre du staff créé: %s (%s)".formatted(event.name(), event.role()));
     }
 
     @ApplicationModuleListener
-    void on(StaffPermissionsUpdatedEvent event) {
+    public void on(StaffPermissionsUpdatedEvent event) {
         record(event.userId(), "Permissions mises à jour: %s".formatted(String.join(", ", event.permissions())));
     }
 
     @ApplicationModuleListener
-    void on(StaffAccessRevokedEvent event) {
+    public void on(StaffAccessRevokedEvent event) {
         record(event.userId(), "Accès révoqué par l'utilisateur #%d".formatted(event.revokedByUserId()));
     }
 

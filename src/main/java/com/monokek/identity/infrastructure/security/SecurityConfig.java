@@ -9,9 +9,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.AccessDeniedException;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
-import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -20,10 +17,9 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -32,10 +28,12 @@ import java.io.IOException;
 import java.util.List;
 
 /**
- * Replaces Laravel's {@code auth:sanctum} + {@code role:admin|manager}
- * middleware stack (see {@code routes/api.php} and {@code bootstrap/app.php}).
- * Sessions/CSRF are irrelevant here: every client (POS, kitchen display,
- * mobile) authenticates with a bearer JWT, so the API is fully stateless.
+ * Resource-server config: monokek-spring no longer authenticates anyone itself —
+ * every bearer JWT is issued by monokek-identity and validated here against its
+ * published JWKS ({@link #jwtDecoder}). This is a deliberate architectural
+ * boundary (see the monokek-identity extraction): pms-modulith validates the
+ * exact same tokens against the exact same JWKS, and neither service has any
+ * config referencing the other — only monokek-identity.
  *
  * <p>{@code @EnableMethodSecurity} turns on {@code @PreAuthorize} as a second,
  * method-level layer on top of the path-based rules below — belt and
@@ -51,7 +49,7 @@ import java.util.List;
 @EnableMethodSecurity
 public class SecurityConfig {
 
-    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final JwtToCurrentUserConverter jwtToCurrentUserConverter;
     private final ObjectMapper objectMapper;
 
     /**
@@ -67,33 +65,21 @@ public class SecurityConfig {
     @Value("${app.cors.allowed-origins}")
     private List<String> allowedOrigins;
 
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter, ObjectMapper objectMapper) {
-        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+    @Value("${app.identity.jwk-set-uri}")
+    private String jwkSetUri;
+
+    public SecurityConfig(JwtToCurrentUserConverter jwtToCurrentUserConverter, ObjectMapper objectMapper) {
+        this.jwtToCurrentUserConverter = jwtToCurrentUserConverter;
         this.objectMapper = objectMapper;
     }
 
     @Bean
-    public PasswordEncoder passwordEncoder() {
-        // Verifies/produces $2a$/$2b$/$2y$ bcrypt hashes interchangeably, so
-        // it stays compatible with hashes created by Laravel's Hash::make().
-        return new BCryptPasswordEncoder();
+    public JwtDecoder jwtDecoder() {
+        return NimbusJwtDecoder.withJwkSetUri(jwkSetUri).build();
     }
 
     @Bean
-    public DaoAuthenticationProvider authenticationProvider(AppUserDetailsService userDetailsService, PasswordEncoder passwordEncoder) {
-        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
-        provider.setUserDetailsService(userDetailsService);
-        provider.setPasswordEncoder(passwordEncoder);
-        return provider;
-    }
-
-    @Bean
-    public AuthenticationManager authenticationManager(AuthenticationConfiguration configuration) throws Exception {
-        return configuration.getAuthenticationManager();
-    }
-
-    @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtDecoder jwtDecoder) throws Exception {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
@@ -107,9 +93,11 @@ public class SecurityConfig {
                         .authenticationEntryPoint(this::writeUnauthenticated)
                         .accessDeniedHandler(this::writeForbidden))
                 .authorizeHttpRequests(auth -> auth
-                        // --- ROUTES PUBLIQUES (see routes/api.php) ---
+                        // --- ROUTES PUBLIQUES ---
+                        // /api/login, /api/me, /api/auth/**, /api/admin/staff/** no longer exist in this
+                        // app at all — Caddy routes those straight to monokek-identity in every real
+                        // deployment (see monokek-deploy/deploy/caddy/Caddyfile).
                         .requestMatchers(
-                                "/api/login",
                                 "/api/ping",
                                 "/api/license/activate",
                                 "/api/license/status",
@@ -134,23 +122,31 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/api/cash/registers/*").hasAnyRole("ADMIN", "MANAGER")
                         // --- ESPACE ADMIN (role:admin|manager) ---
                         .requestMatchers("/api/admin/**").hasAnyRole("ADMIN", "MANAGER")
+                        // --- Server-to-server: monokek-identity forwarding staff/login activity
+                        // for the audit trail (see settings.web.InternalActivityLogController) —
+                        // only its client_credentials token has this scope, never an end-user token.
+                        .requestMatchers("/internal/activity-log/**").hasAuthority("SCOPE_internal.activity-log.write")
                         // --- Everything else requires a valid bearer token ---
                         .anyRequest().authenticated()
                 )
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt
+                        .decoder(jwtDecoder)
+                        .jwtAuthenticationConverter(jwtToCurrentUserConverter)));
 
         return http.build();
     }
 
     /**
-     * No token, an unparseable one, or an expired one — {@code JwtAuthenticationFilter} swallows the
-     * parse failure and simply never sets an Authentication, which without a custom entry point falls
-     * through to Spring Security's default {@code Http403ForbiddenEntryPoint} (403 regardless of cause,
-     * even for "not authenticated at all" — the actual bug behind the security audit's "redirection sur
-     * 401 désactivée" finding: the frontend's 401 handler had nothing to ever fire on). Writes the same
-     * {@code ApiResponse} envelope {@link com.monokek.common.GlobalExceptionHandler} uses everywhere
-     * else, so {@code src/lib/errors.ts} on the frontend reads a message here exactly like any other
-     * error response.
+     * No token, an unparseable/expired one, or a signature that doesn't match
+     * monokek-identity's JWKS — Spring's resource-server support raises an
+     * AuthenticationException, routed here instead of the default
+     * {@code Http403ForbiddenEntryPoint} (403 regardless of cause, even for "not
+     * authenticated at all" — the actual bug behind the security audit's
+     * "redirection sur 401 désactivée" finding: the frontend's 401 handler had
+     * nothing to ever fire on). Writes the same {@code ApiResponse} envelope
+     * {@link com.monokek.common.GlobalExceptionHandler} uses everywhere else, so
+     * {@code src/lib/errors.ts} on the frontend reads a message here exactly like
+     * any other error response.
      */
     private void writeUnauthenticated(HttpServletRequest request, HttpServletResponse response, AuthenticationException ex) throws IOException {
         writeJson(response, HttpStatus.UNAUTHORIZED, "Authentification requise");

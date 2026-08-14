@@ -25,7 +25,7 @@ import java.util.List;
  * covered by {@link CustomerRepository}/{@code CustomerDirectory}); the
  * loyalty-points behavior below is new functionality built on top of the
  * existing {@code customers}/{@code loyalty_transactions} schema, following
- * the same {@code @DomainEvents} pattern as {@code identity.domain.User}.
+ * the same {@code @DomainEvents} pattern as monokek-identity's {@code User} aggregate.
  */
 @Entity
 @Table(name = "customers")

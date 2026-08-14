@@ -41,11 +41,16 @@ spring:
       max-request-size: 10MB
 
 app:
-  jwt:
-    # Same purpose as Laravel's APP_KEY / Sanctum tokens: sign & verify access tokens.
-    # Override with the JWT_SECRET env var in every real environment.
-    secret: ${JWT_SECRET:change-me-change-me-change-me-change-me-32}
-    access-token-ttl-minutes: ${JWT_TTL_MINUTES:480}
+  identity:
+    # monokek-identity issues and signs every bearer token this app validates —
+    # see com.monokek.identity.infrastructure.security.SecurityConfig. No shared
+    # secret anymore: JWKS is fetched (and cached) over HTTP.
+    jwk-set-uri: ${IDENTITY_JWK_SET_URI:http://localhost:8082/oauth2/jwks}
+    # Used by HttpUserDirectory (GET /internal/users) via a client_credentials token.
+    api-url: ${IDENTITY_API_URL:http://localhost:8082}
+    token-uri: ${IDENTITY_TOKEN_URI:http://localhost:8082/oauth2/token}
+    client-id: ${IDENTITY_MONOKEK_SPRING_CLIENT_ID:monokek-spring-service}
+    client-secret: ${IDENTITY_MONOKEK_SPRING_CLIENT_SECRET:change-me-monokek-spring-client-secret}
 
   cors:
     # Comma-separated. Defaults cover the Next.js dev server and a packaged

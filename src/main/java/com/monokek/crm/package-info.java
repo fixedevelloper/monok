@@ -12,7 +12,7 @@
  * earn/redeem loyalty ledger — is new functionality built to the same
  * DDD/event-driven pattern as the ported modules, not a translation of
  * existing behavior. {@code Customer} stages {@code LoyaltyPointsChangedEvent}
- * the same way {@code identity.domain.User} stages its events; {@code settings}
+ * the same way monokek-identity's {@code User} aggregate stages its events; {@code settings}
  * picks it up like it does every other module's events.
  */
 @org.springframework.modulith.ApplicationModule(displayName = "CRM")
