@@ -23,4 +23,7 @@ public class Supplier extends Timestamps {
 
     private String name;
     private String phone;
+    private String email;
+    private String address;
+    private String contactName;
 }

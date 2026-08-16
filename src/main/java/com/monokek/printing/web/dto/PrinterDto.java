@@ -12,6 +12,7 @@ public record PrinterDto(
         int charPerLine,
         boolean active,
         int paperWidth,
-        boolean useBeep
+        boolean useBeep,
+        String osPrinterName
 ) {
 }

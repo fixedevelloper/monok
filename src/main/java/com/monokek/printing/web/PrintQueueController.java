@@ -9,10 +9,14 @@ import java.util.List;
 
 /**
  * Port of the inline print-queue closures in {@code routes/api.php} — kept
- * public (no auth), matching the Laravel source, so a LAN print worker can
- * poll it without a token. {@code SecurityConfig} already permits these
- * exact paths. {@code dispatch-network} (server-side ESC/POS rendering) is
- * not ported — see the module's package-info.
+ * public (no auth), matching the Laravel source, so a LAN print worker (the
+ * Tauri POS app, for USB jobs) can poll it without a token. {@code SecurityConfig}
+ * already permits these exact paths. {@code dispatch-network} (server-side
+ * ESC/POS rendering) is not ported — see the module's package-info.
+ *
+ * <p>{@code pending} is meant as a catch-up fetch on (re)connect — real-time
+ * delivery of new USB jobs happens over SSE via {@code PrintJobQueuedEvent},
+ * see the module's package-info.
  */
 @RestController
 @RequestMapping("/api/print-queue")
@@ -24,9 +28,10 @@ public class PrintQueueController {
         this.printQueueService = printQueueService;
     }
 
+    /** {@code branchId} is required — without it, any caller could see (and ack) every branch's queue. */
     @GetMapping("/pending")
-    public List<PrintQueueDto> pending() {
-        return printQueueService.pending();
+    public List<PrintQueueDto> pending(@RequestParam Long branchId) {
+        return printQueueService.pending(branchId);
     }
 
     @PostMapping("/{jobId}/mark-success")

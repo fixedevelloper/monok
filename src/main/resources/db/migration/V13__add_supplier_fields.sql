@@ -1,0 +1,4 @@
+ALTER TABLE suppliers
+    ADD COLUMN email VARCHAR(255) NULL,
+    ADD COLUMN address VARCHAR(255) NULL,
+    ADD COLUMN contact_name VARCHAR(255) NULL;

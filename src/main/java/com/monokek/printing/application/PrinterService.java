@@ -62,6 +62,7 @@ public class PrinterService {
         printer.setType(request.type());
         printer.setConnection(request.connection());
         printer.setIp("usb".equals(request.connection()) ? null : request.ip());
+        printer.setOsPrinterName("usb".equals(request.connection()) ? request.osPrinterName() : null);
         if (request.port() != null) printer.setPort(request.port());
         if (request.charPerLine() != null) printer.setCharPerLine(request.charPerLine());
         if (request.useBeep() != null) printer.setUseBeep(request.useBeep());
@@ -87,8 +88,10 @@ public class PrinterService {
         // Port of: switching a printer from network to usb clears its IP.
         if ("usb".equals(printer.getConnection())) {
             printer.setIp(null);
-        } else if (request.ip() != null) {
-            printer.setIp(request.ip());
+            if (request.osPrinterName() != null) printer.setOsPrinterName(request.osPrinterName());
+        } else {
+            if (request.ip() != null) printer.setIp(request.ip());
+            printer.setOsPrinterName(null);
         }
 
         return toDto(printerRepository.save(printer));
@@ -141,6 +144,6 @@ public class PrinterService {
         return new PrinterDto(
                 printer.getId(), printer.getBranchId(), printer.getName(), printer.getType(), printer.getConnection(),
                 printer.getLocation(), printer.getIp(), printer.getPort(), printer.getCharPerLine(), printer.isActive(),
-                printer.getPaperWidth(), printer.isUseBeep());
+                printer.getPaperWidth(), printer.isUseBeep(), printer.getOsPrinterName());
     }
 }

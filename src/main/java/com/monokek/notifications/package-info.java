@@ -5,11 +5,12 @@
  * flow one direction, so SSE (plain HTTP, native browser reconnection) is a
  * strictly simpler fit than a full duplex WebSocket.
  *
- * <p>Depends only on {@code ordering.domain.event} (already a {@code @NamedInterface}),
- * same one-directional shape as {@code printing}/{@code kitchen}/{@code inventory}
- * depending on {@code ordering}'s events — {@code application.NotificationEventListener}
- * translates {@code OrderCreatedEvent}/{@code OrderStatusChangedEvent}/
- * {@code KitchenTicketRequestedEvent} into named SSE broadcasts.
+ * <p>Depends on {@code ordering.domain.event} and {@code printing.domain.event}
+ * (both {@code @NamedInterface}s), same one-directional shape as {@code printing}/
+ * {@code kitchen}/{@code inventory} depending on {@code ordering}'s events —
+ * {@code application.NotificationEventListener} translates
+ * {@code OrderCreatedEvent}/{@code OrderStatusChangedEvent}/{@code KitchenTicketRequestedEvent}/
+ * {@code PrintJobQueuedEvent} into named SSE broadcasts.
  *
  * <p>Native {@code EventSource} can't send an {@code Authorization} header,
  * so the stream is guarded by a short-lived, single-use ticket instead of

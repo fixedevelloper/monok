@@ -12,6 +12,7 @@ public record UpdatePrinterRequest(
         Boolean isActive,
         Boolean useBeep,
         Integer paperWidth,
-        String location
+        String location,
+        String osPrinterName
 ) {
 }

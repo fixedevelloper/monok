@@ -51,4 +51,8 @@ public class Printer extends Timestamps {
 
     @Column(name = "use_beep")
     private boolean useBeep = true;
+
+    /** OS-registered printer name (CUPS queue / Windows printer name) a USB job is sent to via the Tauri app's local print plugin — irrelevant for network printers. */
+    @Column(name = "os_printer_name")
+    private String osPrinterName;
 }

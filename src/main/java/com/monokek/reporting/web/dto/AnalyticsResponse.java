@@ -9,7 +9,7 @@ public record AnalyticsResponse(
         BigDecimal totalSales,
         long ordersCount,
         BigDecimal averageCart,
-        int foodCostPercent,
+        BigDecimal foodCostPercent,
         List<HourlyFlow> hourlyFlow,
         List<WaiterPerformance> waiterPerformance,
         List<PaymentMethodTotal> paymentsByMethod,

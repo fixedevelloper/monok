@@ -12,7 +12,9 @@ import com.monokek.printing.domain.Printer;
 import com.monokek.printing.domain.PrintQueue;
 import com.monokek.printing.domain.PrintQueueRepository;
 import com.monokek.printing.domain.PrinterRepository;
+import com.monokek.printing.domain.event.PrintJobQueuedEvent;
 import com.monokek.settings.StoreSettings;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.modulith.events.ApplicationModuleListener;
 import org.springframework.stereotype.Component;
 
@@ -36,15 +38,17 @@ public class PrintQueueListener {
     private final ObjectMapper objectMapper;
     private final StoreSettings storeSettings;
     private final NetworkPrintDispatcher networkPrintDispatcher;
+    private final ApplicationEventPublisher eventPublisher;
 
     public PrintQueueListener(
             PrinterRepository printerRepository, PrintQueueRepository printQueueRepository, ObjectMapper objectMapper,
-            StoreSettings storeSettings, NetworkPrintDispatcher networkPrintDispatcher) {
+            StoreSettings storeSettings, NetworkPrintDispatcher networkPrintDispatcher, ApplicationEventPublisher eventPublisher) {
         this.printerRepository = printerRepository;
         this.printQueueRepository = printQueueRepository;
         this.objectMapper = objectMapper;
         this.storeSettings = storeSettings;
         this.networkPrintDispatcher = networkPrintDispatcher;
+        this.eventPublisher = eventPublisher;
     }
 
     @ApplicationModuleListener
@@ -106,6 +110,10 @@ public class PrintQueueListener {
         PrintQueue job = queue(printer, jobType, content);
         if ("network".equals(printer.getConnection())) {
             networkPrintDispatcher.dispatch(printer, job.getId(), job.getJobType(), job.getContent());
+        } else if ("usb".equals(printer.getConnection())) {
+            eventPublisher.publishEvent(new PrintJobQueuedEvent(
+                    job.getId(), printer.getBranchId(), printer.getId(), printer.getName(), printer.getOsPrinterName(),
+                    job.getJobType(), job.getContent(), (short) job.getPriority()));
         }
     }
 

@@ -21,11 +21,17 @@
  * pattern as {@code PrinterService::testConnection}), synchronously, right
  * when the job is queued — no separate scheduler.
  *
- * <p><b>Still out of scope:</b> USB printers (no server-side network path to
- * them — jobs for them stay {@code pending}, exactly as before, for
- * whatever LAN worker polls {@code GET /api/print-queue/pending} and reports
- * back via {@code mark-success}/{@code mark-failed}), and automatic retry of
- * failed network jobs ({@code attempts} is incremented but nothing re-queues).
+ * <p>USB jobs stay queued ({@code pending}) exactly as before — there's still
+ * no server-side network path to a USB printer — but {@code application.PrintQueueListener}
+ * also publishes {@code domain.event.PrintJobQueuedEvent} (a {@code @NamedInterface})
+ * for them, which {@code notifications.application.NotificationEventListener}
+ * turns into a real-time {@code print-job-queued} SSE push to the owning
+ * branch's Tauri app; {@code GET /api/print-queue/pending?branchId=...} (now
+ * branch-scoped) remains as a catch-up fetch for whatever was queued while
+ * that app was offline. {@code application.PrintRetryScheduler} retries both
+ * kinds of failed job: network jobs by re-dispatching them itself, USB jobs
+ * by re-publishing {@code PrintJobQueuedEvent} so the SSE push reaches
+ * whichever app is (or becomes) connected — see its own javadoc.
  */
 @org.springframework.modulith.ApplicationModule(displayName = "Printing")
 package com.monokek.printing;

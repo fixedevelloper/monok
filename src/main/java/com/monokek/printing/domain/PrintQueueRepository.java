@@ -14,4 +14,8 @@ public interface PrintQueueRepository extends Repository<PrintQueue, Long> {
     Optional<PrintQueue> findById(Long id);
 
     List<PrintQueue> findByStatus(String status);
+
+    List<PrintQueue> findByStatusAndAttemptsLessThan(String status, int maxAttempts);
+
+    List<PrintQueue> findByStatusAndPrinter_BranchId(String status, Long branchId);
 }

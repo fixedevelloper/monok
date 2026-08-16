@@ -189,13 +189,54 @@ public class ReportingService {
                 """, params,
                 (rs, rowNum) -> new AnalyticsResponse.TopProduct(rs.getString("product"), rs.getLong("qty"), rs.getBigDecimal("revenue")));
 
-        // Laravel hardcodes food_cost => 32 with a comment saying it should be
-        // made dynamic later "if necessary" — that placeholder was never
-        // implemented, so it's carried over as-is rather than invented.
-        int foodCostPercent = 32;
+        BigDecimal foodCostPercent = foodCostPercent(params, totalSales);
 
         return new AnalyticsResponse(start.toString(), end.toString(), totalSales, ordersCount, averageCart,
                 foodCostPercent, hourlyFlow, waiterPerformance, paymentsByMethod, salesOverTime, topProducts);
+    }
+
+    /**
+     * Cost of goods sold, as a percentage of {@code totalSales}, for the same
+     * {@code :start}/{@code :end} window as the rest of {@link #getAnalytics}.
+     * No table stores a current unit cost per ingredient, so each ingredient's
+     * cost is approximated by its most recent {@code purchase_order_items.price}
+     * (the only place a monetary ingredient cost is ever recorded). Products
+     * without a recipe contribute zero cost, since there is no cost data for
+     * them either.
+     */
+    private BigDecimal foodCostPercent(MapSqlParameterSource params, BigDecimal totalSales) {
+        BigDecimal cogs = jdbc.queryForObject(
+                """
+                WITH latest_ingredient_price AS (
+                    SELECT ingredient_id, price FROM (
+                        SELECT poi.ingredient_id, poi.price,
+                               ROW_NUMBER() OVER (
+                                   PARTITION BY poi.ingredient_id
+                                   ORDER BY po.created_at DESC, poi.id DESC
+                               ) AS rn
+                        FROM purchase_order_items poi
+                        JOIN purchase_orders po ON poi.purchase_order_id = po.id
+                    ) ranked WHERE rn = 1
+                ),
+                recipe_cost AS (
+                    SELECT r.product_id, SUM(ri.qty * COALESCE(lip.price, 0)) AS unit_cost
+                    FROM recipes r
+                    JOIN recipe_items ri ON ri.recipe_id = r.id
+                    LEFT JOIN latest_ingredient_price lip ON lip.ingredient_id = ri.ingredient_id
+                    GROUP BY r.product_id
+                )
+                SELECT COALESCE(SUM(oi.qty * rc.unit_cost), 0)
+                FROM order_items oi
+                JOIN order_rounds orr ON oi.order_round_id = orr.id
+                JOIN orders o ON orr.order_id = o.id
+                JOIN recipe_cost rc ON rc.product_id = oi.product_id
+                WHERE o.status = 'paid' AND o.created_at >= :start AND o.created_at < :end
+                """, params, BigDecimal.class);
+
+        if (totalSales == null || totalSales.compareTo(BigDecimal.ZERO) <= 0) {
+            return BigDecimal.ZERO;
+        }
+        return cogs.multiply(BigDecimal.valueOf(100)).divide(totalSales, 1, RoundingMode.HALF_UP);
     }
 
     private MapSqlParameterSource dayRange(LocalDate day) {

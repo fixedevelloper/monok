@@ -54,8 +54,12 @@
  *   <li>{@code getAnalytics()} was already almost entirely correct against
  *       the real schema (unlike the other three) — ported with only the
  *       column names double-checked, no structural changes. Its hardcoded
- *       {@code food_cost => 32} placeholder is carried over as-is; Laravel's
- *       own comment already flagged it as a stub for later.</li>
+ *       {@code food_cost => 32} Laravel placeholder was replaced with a real
+ *       computation ({@code foodCostPercent(...)}): cost of goods sold, derived
+ *       from each sold product's recipe and each ingredient's most recent
+ *       purchase price, as a percentage of {@code totalSales}. Ingredients
+ *       have no stored current unit cost, so this is an approximation off the
+ *       latest known purchase price rather than a weighted average.</li>
  * </ul>
  */
 @org.springframework.modulith.ApplicationModule(displayName = "Reporting")

@@ -13,6 +13,7 @@ public record CreatePrinterRequest(
         Integer charPerLine,
         Boolean useBeep,
         Integer paperWidth,          // 58, 80
-        @NotBlank String location    // receipt, kitchen, bar, pizza, delivery
+        @NotBlank String location,   // receipt, kitchen, bar, pizza, delivery
+        String osPrinterName         // CUPS/Windows printer name — usb only
 ) {
 }

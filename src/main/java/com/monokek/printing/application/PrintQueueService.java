@@ -27,9 +27,25 @@ public class PrintQueueService {
         this.printQueueRepository = printQueueRepository;
     }
 
+    /** {@code branchId} is mandatory — a LAN worker (the Tauri POS app) must only ever see its own branch's queue. */
     @Transactional(readOnly = true)
-    public List<PrintQueueDto> pending() {
-        return printQueueRepository.findByStatus("pending").stream().map(this::toDto).toList();
+    public List<PrintQueueDto> pending(Long branchId) {
+        return printQueueRepository.findByStatusAndPrinter_BranchId("pending", branchId).stream().map(this::toDto).toList();
+    }
+
+    /**
+     * Failed jobs still worth retrying. Force-loads each job's lazy
+     * {@code printer} association while the transaction (and Hibernate
+     * session) is still open, so {@link PrintRetryScheduler} can safely read
+     * it afterward without a {@code LazyInitializationException} — the
+     * network I/O in {@link NetworkPrintDispatcher#dispatch} must not run
+     * inside this transaction.
+     */
+    @Transactional(readOnly = true)
+    public List<PrintQueue> findRetryableJobs(int maxAttempts) {
+        List<PrintQueue> jobs = printQueueRepository.findByStatusAndAttemptsLessThan("failed", maxAttempts);
+        jobs.forEach(job -> job.getPrinter().getConnection());
+        return jobs;
     }
 
     @Transactional
@@ -62,6 +78,7 @@ public class PrintQueueService {
     private PrintQueueDto toDto(PrintQueue job) {
         return new PrintQueueDto(
                 job.getId(), job.getPrinter().getId(), job.getPrinter().getName(), job.getPrinter().getIp(), job.getPrinter().getPort(),
+                job.getPrinter().getOsPrinterName(),
                 job.getJobType(), job.getContent(), job.getAttempts(), job.getStatus(), job.getErrorMessage(), job.getPriority());
     }
 }
