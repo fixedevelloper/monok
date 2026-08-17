@@ -25,4 +25,8 @@ public class OrderStatusHistory extends Timestamps {
 
     /** References identity.User by id only. */
     private Long userId;
+
+    /** Free-text explanation — only ever set for a manual/exceptional transition (e.g. a cancellation). */
+    @Column(columnDefinition = "TEXT")
+    private String reason;
 }

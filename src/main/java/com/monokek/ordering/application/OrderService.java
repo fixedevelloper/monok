@@ -216,6 +216,24 @@ public class OrderService {
         events.publishEvent(toOrderPaidEvent(order, request.paymentMethod(), request.amountReceived(), payment.changeDue()));
     }
 
+    /**
+     * Voids an order that was never paid — the guest left without settling, or the till simply
+     * needs it off the board. Frees the table (same rule as {@link #finalizePayment}: skip virtual
+     * takeaway tables) so it doesn't stay falsely "occupied" forever. Gated by the {@code
+     * cancel_orders} permission at the controller — this method itself only enforces that the
+     * order is actually cancellable ({@link Order#cancel}: not paid, not already cancelled).
+     */
+    @Transactional
+    public void cancelOrder(UUID orderUuid, String reason, Long cancelledByUserId) {
+        Order order = orderRepository.findByUuid(orderUuid).orElseThrow(() -> ApiException.notFound("Commande introuvable."));
+        order.cancel(cancelledByUserId, reason);
+        orderRepository.save(order);
+
+        if (order.getTableId() != null && !isVirtualTable(order.getTableId())) {
+            tableDirectory.markFree(order.getTableId());
+        }
+    }
+
     /** Confirms the room is occupied, then bills this order's total to that stay's folio in pms-modulith. */
     private void chargeToGuestRoom(Order order, String roomNumber, String bearerToken) {
         if (roomNumber == null || roomNumber.isBlank()) {

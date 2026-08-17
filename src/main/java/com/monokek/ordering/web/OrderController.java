@@ -51,6 +51,21 @@ public class OrderController {
         return ApiResponse.success(new RoomLookupResponse(result.bookingId(), result.guestName()));
     }
 
+    /**
+     * Voids an unpaid order — restricted to ADMIN/MANAGER (with {@code cancel_orders}) rather than
+     * every till role: an unsupervised void is a classic POS fraud vector (ring up cash, pocket it,
+     * void the order). No class-level {@code @PreAuthorize} exists on this controller (every other
+     * {@code /api/pos/**} action is open to any authenticated staff member running the till), so
+     * this is the only gate — deliberately, not an oversight.
+     */
+    @PostMapping("/api/pos/orders/{uuid}/cancel")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('cancel_orders'))")
+    public ApiResponse<Void> cancelOrder(
+            @PathVariable UUID uuid, @Valid @RequestBody CancelOrderRequest request, @AuthenticationPrincipal CurrentUser principal) {
+        orderService.cancelOrder(uuid, request.reason(), principal.id());
+        return ApiResponse.message("Commande annulée");
+    }
+
     @GetMapping("/api/pos/orders")
     public Page<OrderDto> index(
             @RequestParam(required = false) String search,

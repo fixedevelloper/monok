@@ -157,12 +157,18 @@ public class Order extends Timestamps {
 
     /** Transitions status, appends an {@link OrderStatusHistory} entry and stages an {@link OrderStatusChangedEvent}. */
     public void changeStatus(String newStatus, Long changedByUserId) {
+        changeStatus(newStatus, changedByUserId, null);
+    }
+
+    /** Same as {@link #changeStatus(String, Long)}, with a free-text reason recorded on the history entry — see {@link #cancel}. */
+    public void changeStatus(String newStatus, Long changedByUserId, String reason) {
         String previous = this.status;
         this.status = newStatus;
         OrderStatusHistory history = new OrderStatusHistory();
         history.setOrder(this);
         history.setStatus(newStatus);
         history.setUserId(changedByUserId);
+        history.setReason(reason);
         statusHistories.add(history);
         pendingEvents.add(new UnresolvedEvent(EventKind.STATUS_CHANGED, new Object[]{previous, newStatus, changedByUserId}));
     }
@@ -174,6 +180,27 @@ public class Order extends Timestamps {
 
     public boolean isPaid() {
         return "paid".equals(status);
+    }
+
+    public boolean isCancelled() {
+        return "cancelled".equals(status);
+    }
+
+    /**
+     * Voids an order that never got paid — e.g. the guest left without settling the bill. A paid
+     * order needs a refund flow, not a cancellation (billing is already reconciled); an
+     * already-cancelled one can't be cancelled twice. The reason is mandatory at the service layer
+     * ({@code OrderService#cancelOrder}), not re-validated here — this method just refuses to run
+     * on a status where "why" wouldn't make sense.
+     */
+    public void cancel(Long cancelledByUserId, String reason) {
+        if (isPaid()) {
+            throw ApiException.conflict("Impossible d'annuler une commande déjà payée.");
+        }
+        if (isCancelled()) {
+            throw ApiException.conflict("Cette commande est déjà annulée.");
+        }
+        changeStatus("cancelled", cancelledByUserId, reason);
     }
 
     /** Port of {@code TableController::transfer}'s {@code $order->update(['table_id' => ...])}. */
