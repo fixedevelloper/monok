@@ -43,6 +43,14 @@ public class OrderController {
         return ApiResponse.success(null, "Payé");
     }
 
+    /** Pre-payment lookup for a "Chambre" (room charge) payment — see {@code OrderService#checkGuestRoom}. */
+    @GetMapping("/api/pos/rooms/{roomNumber}")
+    public ApiResponse<RoomLookupResponse> checkRoom(
+            @PathVariable String roomNumber, @RequestHeader(HttpHeaders.AUTHORIZATION) String authorization) {
+        var result = orderService.checkGuestRoom(roomNumber, authorization);
+        return ApiResponse.success(new RoomLookupResponse(result.bookingId(), result.guestName()));
+    }
+
     @GetMapping("/api/pos/orders")
     public Page<OrderDto> index(
             @RequestParam(required = false) String search,

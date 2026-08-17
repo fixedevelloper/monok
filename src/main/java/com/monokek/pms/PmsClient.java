@@ -11,13 +11,18 @@ public interface PmsClient {
 
     /**
      * Confirms the room is occupied by a checked-in guest in pms-modulith and
-     * returns the booking id to bill charges against.
+     * returns the booking id to bill charges against, along with the guest's
+     * name — callers must surface it for a human to confirm before billing,
+     * rather than trusting a bare room number typed at the till.
      *
      * @throws com.monokek.common.ApiException notFound if the room isn't occupied
      *         (or doesn't exist), serviceUnavailable if pms-modulith can't be reached
      */
-    Long checkRoomAndGetBookingId(String roomNumber, String bearerToken);
+    RoomCheckResult checkRoom(String roomNumber, String bearerToken);
 
     /** Bills one restaurant charge to the room's folio for the given booking. */
     void chargeToRoom(Long bookingId, BigDecimal amount, String orderReference, String bearerToken);
+
+    record RoomCheckResult(Long bookingId, String guestName) {
+    }
 }

@@ -23,13 +23,13 @@ class PmsClientService implements PmsClient {
     }
 
     @Override
-    public Long checkRoomAndGetBookingId(String roomNumber, String bearerToken) {
+    public RoomCheckResult checkRoom(String roomNumber, String bearerToken) {
         RoomCheckResponse result = call(() -> restClient.get()
                 .uri("/restaurant/check-room/{roomNumber}", roomNumber)
                 .header(HttpHeaders.AUTHORIZATION, bearerToken)
                 .retrieve()
                 .body(RoomCheckResponse.class));
-        return result.bookingId();
+        return new RoomCheckResult(result.bookingId(), result.guestName());
     }
 
     @Override

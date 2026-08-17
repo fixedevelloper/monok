@@ -221,8 +221,23 @@ public class OrderService {
         if (roomNumber == null || roomNumber.isBlank()) {
             throw ApiException.badRequest("Le numéro de chambre est requis pour un paiement \"Chambre\".");
         }
-        Long bookingId = pmsClient.checkRoomAndGetBookingId(roomNumber.trim(), bearerToken);
+        Long bookingId = pmsClient.checkRoom(roomNumber.trim(), bearerToken).bookingId();
         pmsClient.chargeToRoom(bookingId, order.getTotal(), order.getReference(), bearerToken);
+    }
+
+    /**
+     * Standalone room lookup, called by the till BEFORE finalizing a "Chambre" payment so the
+     * cashier can see and confirm the guest's name — {@link #finalizePayment} re-checks the room
+     * itself right before billing (it can't trust a client-side confirmation from a prior call),
+     * this is purely so a wrong/guessed room number is caught with a visible name mismatch instead
+     * of silently billing whoever happens to be checked into that room.
+     */
+    @Transactional(readOnly = true)
+    public PmsClient.RoomCheckResult checkGuestRoom(String roomNumber, String bearerToken) {
+        if (roomNumber == null || roomNumber.isBlank()) {
+            throw ApiException.badRequest("Le numéro de chambre est requis.");
+        }
+        return pmsClient.checkRoom(roomNumber.trim(), bearerToken);
     }
 
     /**
