@@ -37,6 +37,7 @@ public class IngredientController {
 
     @PostMapping("/ingredients")
     @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('manage_stock'))")
     public IngredientDto store(@Valid @RequestBody CreateIngredientRequest request) {
         return ingredientService.create(request);
     }
@@ -52,6 +53,7 @@ public class IngredientController {
     }
 
     @PostMapping("/ingredients/{ingredientId}/adjust")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('manage_stock'))")
     public Map<String, Object> adjustStock(@PathVariable Long ingredientId, @Valid @RequestBody AdjustStockRequest request) {
         BigDecimal newStock = ingredientService.adjustStock(ingredientId, request);
         return Map.of("message", "Stock mis à jour", "new_stock", newStock);

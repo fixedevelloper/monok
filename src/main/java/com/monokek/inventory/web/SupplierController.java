@@ -34,6 +34,7 @@ public class SupplierController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('manage_stock'))")
     public SupplierDto store(@Valid @RequestBody CreateSupplierRequest request) {
         return supplierService.create(request);
     }
@@ -44,11 +45,13 @@ public class SupplierController {
     }
 
     @RequestMapping(value = "/{id}", method = {RequestMethod.PUT, RequestMethod.PATCH})
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('manage_stock'))")
     public SupplierDto update(@PathVariable Long id, @RequestBody UpdateSupplierRequest request) {
         return supplierService.update(id, request);
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('manage_stock'))")
     public void destroy(@PathVariable Long id) {
         supplierService.delete(id);
     }

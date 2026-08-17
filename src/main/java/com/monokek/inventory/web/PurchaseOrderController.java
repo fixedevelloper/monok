@@ -24,6 +24,7 @@ public class PurchaseOrderController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('manage_stock'))")
     public ApiResponse<Void> store(@Valid @RequestBody CreatePurchaseOrderRequest request) {
         purchaseOrderService.store(request);
         return ApiResponse.message("Commande fournisseur enregistrée et stock mis à jour");

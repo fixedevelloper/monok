@@ -35,11 +35,13 @@ public class ReportController {
     }
 
     @GetMapping("/api/admin/reports/dashboard")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('view_reports'))")
     public DashboardStatsResponse dashboardStats() {
         return reportingService.dashboardStats();
     }
 
     @GetMapping("/api/admin/reports/categories")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('view_reports'))")
     public List<CategorySales> salesByCategory(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
@@ -47,11 +49,13 @@ public class ReportController {
     }
 
     @GetMapping("/api/admin/reports/closing")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('view_reports'))")
     public ClosingReportResponse closingReport(@AuthenticationPrincipal CurrentUser currentUser) {
         return reportingService.closingReport(currentUser.id(), currentUser.name());
     }
 
     @GetMapping("/api/admin/analytics")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('view_analytics'))")
     public AnalyticsResponse getAnalytics(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {

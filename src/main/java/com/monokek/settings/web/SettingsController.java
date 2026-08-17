@@ -31,7 +31,7 @@ public class SettingsController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('manage_settings'))")
     public Map<String, Object> update(@Valid @RequestBody UpdateSettingsRequest request) {
         Map<String, Object> data = settingsService.update(request.settings());
         return Map.of("message", "Configurations enregistrées", "data", data);

@@ -44,19 +44,19 @@ public class CategoryController {
 
     @PostMapping("/api/admin/categories")
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('manage_categories'))")
     public CategoryDto store(@Valid @RequestBody CreateCategoryRequest request, @AuthenticationPrincipal CurrentUser principal) {
         return categoryService.create(request, principal.branchId());
     }
 
     @PutMapping("/api/admin/categories/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('manage_categories'))")
     public CategoryDto update(@PathVariable Long id, @RequestBody UpdateCategoryRequest request) {
         return categoryService.update(id, request);
     }
 
     @DeleteMapping("/api/admin/categories/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('manage_categories'))")
     public void destroy(@PathVariable Long id) {
         categoryService.delete(id);
     }

@@ -43,16 +43,19 @@ public class ModifierController {
 
     @PostMapping("/api/admin/modifiers")
     @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('manage_products'))")
     public ModifierDto store(@Valid @RequestBody CreateModifierRequest request) {
         return modifierService.create(request);
     }
 
     @PutMapping("/api/admin/modifiers/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('manage_products'))")
     public ModifierDto update(@PathVariable Long id, @Valid @RequestBody UpdateModifierRequest request) {
         return modifierService.update(id, request);
     }
 
     @DeleteMapping("/api/admin/modifiers/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('manage_products'))")
     public Map<String, String> destroy(@PathVariable Long id) {
         modifierService.delete(id);
         return Map.of("message", "Groupe supprimé avec succès");
@@ -60,11 +63,13 @@ public class ModifierController {
 
     @PostMapping("/api/admin/modifiers/{id}/items")
     @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('manage_products'))")
     public ModifierDto addItem(@PathVariable Long id, @Valid @RequestBody CreateModifierItemRequest request) {
         return modifierService.addItem(id, request);
     }
 
     @DeleteMapping("/api/admin/modifier-items/{itemId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('manage_products'))")
     public Map<String, String> destroyItem(@PathVariable Long itemId) {
         modifierService.destroyItem(itemId);
         return Map.of("message", "Option supprimée");

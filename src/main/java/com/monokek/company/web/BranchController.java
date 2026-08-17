@@ -34,6 +34,7 @@ public class BranchController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('manage_branch'))")
     public BranchDto store(@Valid @RequestBody CreateBranchRequest request) {
         return branchService.create(request);
     }
@@ -44,11 +45,13 @@ public class BranchController {
     }
 
     @RequestMapping(value = "/{id}", method = {RequestMethod.PUT, RequestMethod.PATCH})
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('manage_branch'))")
     public BranchDto update(@PathVariable Long id, @RequestBody UpdateBranchRequest request) {
         return branchService.update(id, request);
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('manage_branch'))")
     public void destroy(@PathVariable Long id) {
         branchService.delete(id);
     }

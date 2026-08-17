@@ -34,6 +34,7 @@ public class CouponController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('manage_discounts'))")
     public CouponDto store(@Valid @RequestBody CreateCouponRequest request) {
         return couponService.create(request);
     }

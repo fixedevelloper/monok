@@ -45,19 +45,19 @@ public class ProductController {
 
     @PostMapping("/api/admin/products")
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('manage_products'))")
     public ProductDto store(@Valid @RequestBody CreateProductRequest request) {
         return productService.create(request);
     }
 
     @PatchMapping("/api/admin/products/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('manage_products'))")
     public ProductDto update(@PathVariable Long id, @RequestBody UpdateProductRequest request) {
         return productService.update(id, request);
     }
 
     @DeleteMapping("/api/admin/products/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('manage_products'))")
     public Map<String, String> destroy(@PathVariable Long id) {
         productService.delete(id);
         return Map.of("message", "Produit supprimé");
@@ -65,14 +65,14 @@ public class ProductController {
 
     @PostMapping("/api/admin/products/bulk-import")
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('manage_products'))")
     public Map<String, String> bulkImport(@Valid @RequestBody BulkImportRequest request) {
         int count = productService.bulkImport(request);
         return Map.of("message", "Succès ! %d produits ont été importés.".formatted(count));
     }
 
     @PostMapping("/api/admin/products/{id}/sync-modifiers")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('manage_products'))")
     public Map<String, String> syncModifiers(@PathVariable Long id, @RequestBody SyncModifiersRequest request) {
         productService.syncModifiers(id, request.modifierIds());
         return Map.of("message", "Modificateurs synchronisés");

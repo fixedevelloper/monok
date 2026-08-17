@@ -34,6 +34,7 @@ public class CompanyController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('manage_branch'))")
     public CompanyDto store(@Valid @RequestBody CreateCompanyRequest request) {
         return companyService.create(request);
     }
@@ -44,11 +45,13 @@ public class CompanyController {
     }
 
     @RequestMapping(value = "/{id}", method = {RequestMethod.PUT, RequestMethod.PATCH})
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('manage_branch'))")
     public CompanyDto update(@PathVariable Long id, @RequestBody UpdateCompanyRequest request) {
         return companyService.update(id, request);
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('manage_branch'))")
     public void destroy(@PathVariable Long id) {
         companyService.delete(id);
     }

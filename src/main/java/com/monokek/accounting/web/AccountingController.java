@@ -44,6 +44,7 @@ public class AccountingController {
     }
 
     @GetMapping("/{report}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('view_reports'))")
     public ResponseEntity<byte[]> export(
             @PathVariable String report,
             @RequestParam("start_date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
