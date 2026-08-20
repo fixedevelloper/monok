@@ -7,6 +7,7 @@ import com.github.anastaciocintra.escpos.Style;
 import com.github.anastaciocintra.escpos.barcode.QRCode;
 import com.github.anastaciocintra.escpos.image.EscPosImage;
 import com.github.anastaciocintra.escpos.image.RasterBitImageWrapper;
+import com.monokek.printing.application.dto.CouponContent;
 import com.monokek.printing.application.dto.KitchenTicketContent;
 import com.monokek.printing.application.dto.ReceiptContent;
 import com.monokek.printing.application.dto.SessionSummaryContent;
@@ -25,8 +26,8 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Writes {@link KitchenTicketContent}/{@link ReceiptContent}/{@link SessionSummaryContent}
- * as ESC/POS onto an already-open {@link EscPos} — ported line-for-line from
+ * Writes {@link KitchenTicketContent}/{@link ReceiptContent}/{@link SessionSummaryContent}/
+ * {@link CouponContent} as ESC/POS onto an already-open {@link EscPos} — ported line-for-line from
  * the reference Laravel implementation ({@code mike42/escpos-php}) supplied
  * by the user, using {@code escpos-coffee}'s equivalents: {@link Style} for
  * justification/size/bold, {@link QRCode} for the receipt's QR, {@link LogoImageLoader}
@@ -144,6 +145,35 @@ public class EscPosTicketRenderer {
         pulseDrawer(escpos);
 
         escpos.writeLF(centered(), "Merci de votre visite !");
+        escpos.feed(3).cut(EscPos.CutMode.FULL);
+    }
+
+    // ------------------------------------------------------------------
+    // Promotional coupon
+    // ------------------------------------------------------------------
+
+    public void renderCoupon(EscPos escpos, CouponContent content, Printer printer) throws IOException {
+        escpos.writeLF(header2x(), orNa(content.storeName()).toUpperCase());
+        if (content.storeAddress() != null) {
+            escpos.writeLF(centered(), content.storeAddress());
+        }
+        if (content.storePhone() != null) {
+            escpos.writeLF(centered(), "Tel : " + content.storePhone());
+        }
+        escpos.writeLF(doubleRule(printer));
+        escpos.writeLF(centered(), "BON DE REDUCTION");
+        escpos.feed(1);
+
+        escpos.writeLF(header2x(), content.code().toUpperCase());
+        escpos.feed(1);
+
+        escpos.writeLF(centered(), "Valeur : " + formatFcfa(content.amount()));
+        if (content.expiresAt() != null) {
+            escpos.writeLF(centered(), "Valable jusqu'au " + content.expiresAt().substring(0, 10));
+        }
+        escpos.writeLF(rule(printer));
+        escpos.writeLF(centered(), "A presenter en caisse lors du reglement.");
+
         escpos.feed(3).cut(EscPos.CutMode.FULL);
     }
 

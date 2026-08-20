@@ -1,6 +1,7 @@
 package com.monokek.printing.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.monokek.crm.domain.event.CouponPrintRequestedEvent;
 import com.monokek.ordering.domain.event.KitchenTicketRequestedEvent;
 import com.monokek.printing.domain.PrintQueue;
 import com.monokek.printing.domain.PrintQueueRepository;
@@ -11,6 +12,7 @@ import com.monokek.settings.StoreSettings;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationEventPublisher;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -94,6 +96,38 @@ class PrintQueueListenerTest {
 
         verify(networkPrintDispatcher).dispatch(eq(printer), eq(99L), eq("kitchen"), any());
         verify(eventPublisher, never()).publishEvent(any(PrintJobQueuedEvent.class));
+    }
+
+    @Test
+    void routesACouponToTheBranchsReceiptPrinter() {
+        Printer printer = new Printer();
+        printer.setId(11L);
+        printer.setBranchId(3L);
+        printer.setLocation("receipt");
+        printer.setConnection("network");
+        printer.setIp("192.168.1.60");
+
+        PrinterRepository printerRepository = mock(PrinterRepository.class);
+        when(printerRepository.findFirstByBranchIdAndLocationAndActiveTrue(3L, "receipt")).thenReturn(Optional.of(printer));
+
+        PrintQueueRepository printQueueRepository = mock(PrintQueueRepository.class);
+        when(printQueueRepository.save(any(PrintQueue.class))).thenAnswer(inv -> {
+            PrintQueue job = inv.getArgument(0);
+            job.setId(55L);
+            return job;
+        });
+
+        NetworkPrintDispatcher networkPrintDispatcher = mock(NetworkPrintDispatcher.class);
+        ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
+        StoreSettings storeSettings = mock(StoreSettings.class);
+        when(storeSettings.current()).thenReturn(new StoreSettings.StoreInfo("Mono-Kek", "Douala", "699000000", null));
+
+        PrintQueueListener listener = new PrintQueueListener(
+                printerRepository, printQueueRepository, objectMapper, storeSettings, networkPrintDispatcher, eventPublisher);
+
+        listener.on(new CouponPrintRequestedEvent(1L, "PROMO10", new BigDecimal("1000"), null, 3L));
+
+        verify(networkPrintDispatcher).dispatch(eq(printer), eq(55L), eq("coupon"), any());
     }
 
     private Printer usbPrinter(Long id, Long branchId, String name, String osPrinterName) {

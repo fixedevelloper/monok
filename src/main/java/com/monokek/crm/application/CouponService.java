@@ -3,9 +3,11 @@ package com.monokek.crm.application;
 import com.monokek.common.ApiException;
 import com.monokek.crm.domain.Coupon;
 import com.monokek.crm.domain.CouponRepository;
+import com.monokek.crm.domain.event.CouponPrintRequestedEvent;
 import com.monokek.crm.web.dto.CouponDto;
 import com.monokek.crm.web.dto.CouponValidationResult;
 import com.monokek.crm.web.dto.CreateCouponRequest;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,9 +22,11 @@ public class CouponService {
     private static final DateTimeFormatter DATE_TIME = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
 
     private final CouponRepository couponRepository;
+    private final ApplicationEventPublisher events;
 
-    public CouponService(CouponRepository couponRepository) {
+    public CouponService(CouponRepository couponRepository, ApplicationEventPublisher events) {
         this.couponRepository = couponRepository;
+        this.events = events;
     }
 
     @Transactional(readOnly = true)
@@ -50,6 +54,17 @@ public class CouponService {
                         ? new CouponValidationResult(false, BigDecimal.ZERO, "Ce coupon a expiré.")
                         : new CouponValidationResult(true, coupon.getAmount(), "Coupon valide."))
                 .orElseGet(() -> new CouponValidationResult(false, BigDecimal.ZERO, "Code coupon inconnu."));
+    }
+
+    /** Asks the requesting branch's receipt printer to print this coupon — see {@code printing.application.PrintQueueListener}. */
+    @Transactional(readOnly = true)
+    public void printCoupon(Long couponId, Long branchId) {
+        Coupon coupon = couponRepository.findById(couponId)
+                .orElseThrow(() -> ApiException.notFound("Coupon introuvable."));
+        events.publishEvent(new CouponPrintRequestedEvent(
+                coupon.getId(), coupon.getCode(), coupon.getAmount(),
+                coupon.getExpiresAt() == null ? null : coupon.getExpiresAt().format(DATE_TIME),
+                branchId));
     }
 
     private CouponDto toDto(Coupon coupon) {

@@ -2,9 +2,11 @@ package com.monokek.printing.application;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.monokek.crm.domain.event.CouponPrintRequestedEvent;
 import com.monokek.ordering.domain.event.KitchenTicketRequestedEvent;
 import com.monokek.ordering.domain.event.OrderPaidEvent;
 import com.monokek.ordering.domain.event.SessionReportReadyEvent;
+import com.monokek.printing.application.dto.CouponContent;
 import com.monokek.printing.application.dto.KitchenTicketContent;
 import com.monokek.printing.application.dto.ReceiptContent;
 import com.monokek.printing.application.dto.SessionSummaryContent;
@@ -97,6 +99,17 @@ public class PrintQueueListener {
                     event.openingAmount(), event.totalSales(), event.expectedAmount(), event.actualAmount(), event.difference(),
                     breakdown, soldItems);
             dispatch(printer, "session_summary", content);
+        });
+    }
+
+    @ApplicationModuleListener
+    void on(CouponPrintRequestedEvent event) {
+        printerForLocation(event.branchId(), "receipt").ifPresent(printer -> {
+            StoreSettings.StoreInfo store = storeSettings.current();
+            CouponContent content = new CouponContent(
+                    store.name(), store.address(), store.phone(),
+                    event.code(), event.amount(), event.expiresAt());
+            dispatch(printer, "coupon", content);
         });
     }
 

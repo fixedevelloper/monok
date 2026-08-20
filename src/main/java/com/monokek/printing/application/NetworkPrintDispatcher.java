@@ -3,6 +3,7 @@ package com.monokek.printing.application;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.anastaciocintra.escpos.EscPos;
 import com.github.anastaciocintra.output.TcpIpOutputStream;
+import com.monokek.printing.application.dto.CouponContent;
 import com.monokek.printing.application.dto.KitchenTicketContent;
 import com.monokek.printing.application.dto.ReceiptContent;
 import com.monokek.printing.application.dto.SessionSummaryContent;
@@ -48,6 +49,7 @@ public class NetworkPrintDispatcher {
             switch (jobType) {
                 case "receipt" -> renderer.renderReceipt(escpos, objectMapper.readValue(contentJson, ReceiptContent.class), printer);
                 case "session_summary" -> renderer.renderSessionSummary(escpos, objectMapper.readValue(contentJson, SessionSummaryContent.class), printer);
+                case "coupon" -> renderer.renderCoupon(escpos, objectMapper.readValue(contentJson, CouponContent.class), printer);
                 default -> renderer.renderKitchen(escpos, objectMapper.readValue(contentJson, KitchenTicketContent.class), printer);
             }
             escpos.flush();

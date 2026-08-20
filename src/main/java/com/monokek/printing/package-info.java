@@ -3,13 +3,15 @@
  * network) and the print job queue. Implemented end-to-end for everything
  * that's actual server-side business logic. Depends on {@code ordering}
  * (its {@code domain.event} named interface — {@code KitchenTicketRequestedEvent}/
- * {@code OrderPaidEvent}/{@code SessionReportReadyEvent}) and on {@code settings}
- * ({@code StoreSettings}, for the receipt header + logo) — same shape as
- * {@code kitchen} and {@code inventory} depending on {@code ordering}'s events.
+ * {@code OrderPaidEvent}/{@code SessionReportReadyEvent}), on {@code crm}
+ * (its {@code domain.event} named interface — {@code CouponPrintRequestedEvent},
+ * raised on demand from the CRM screen rather than tied to an order) and on
+ * {@code settings} ({@code StoreSettings}, for the receipt header + logo) —
+ * same shape as {@code kitchen} and {@code inventory} depending on {@code ordering}'s events.
  *
- * <p>{@code application.PrintQueueListener} reacts to those three events,
+ * <p>{@code application.PrintQueueListener} reacts to those four events,
  * builds the real ticket content ({@code application.dto.KitchenTicketContent}/
- * {@code ReceiptContent}/{@code SessionSummaryContent} — item names, prices,
+ * {@code ReceiptContent}/{@code SessionSummaryContent}/{@code CouponContent} — item names, prices,
  * table, payment method, per-round grouping; no more ids-only placeholder),
  * enqueues the job, and — for network printers only — hands it straight to
  * {@code application.NetworkPrintDispatcher}, which renders it with

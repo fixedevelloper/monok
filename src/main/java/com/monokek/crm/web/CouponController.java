@@ -43,4 +43,11 @@ public class CouponController {
     public CouponValidationResult validate(@RequestParam String code) {
         return couponService.validate(code);
     }
+
+    /** {@code branchId} picks which POS terminal's receipt printer the ticket goes to — a coupon itself has no branch of its own. */
+    @PostMapping("/{id}/print")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public void print(@PathVariable Long id, @RequestParam Long branchId) {
+        couponService.printCoupon(id, branchId);
+    }
 }
