@@ -3,6 +3,7 @@ package com.monokek.printing.application;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.monokek.crm.domain.event.CouponPrintRequestedEvent;
+import com.monokek.kitchen.KitchenStationDirectory;
 import com.monokek.ordering.domain.event.KitchenTicketRequestedEvent;
 import com.monokek.ordering.domain.event.OrderPaidEvent;
 import com.monokek.ordering.domain.event.SessionReportReadyEvent;
@@ -41,21 +42,27 @@ public class PrintQueueListener {
     private final StoreSettings storeSettings;
     private final NetworkPrintDispatcher networkPrintDispatcher;
     private final ApplicationEventPublisher eventPublisher;
+    private final KitchenStationDirectory kitchenStationDirectory;
 
     public PrintQueueListener(
             PrinterRepository printerRepository, PrintQueueRepository printQueueRepository, ObjectMapper objectMapper,
-            StoreSettings storeSettings, NetworkPrintDispatcher networkPrintDispatcher, ApplicationEventPublisher eventPublisher) {
+            StoreSettings storeSettings, NetworkPrintDispatcher networkPrintDispatcher, ApplicationEventPublisher eventPublisher,
+            KitchenStationDirectory kitchenStationDirectory) {
         this.printerRepository = printerRepository;
         this.printQueueRepository = printQueueRepository;
         this.objectMapper = objectMapper;
         this.storeSettings = storeSettings;
         this.networkPrintDispatcher = networkPrintDispatcher;
         this.eventPublisher = eventPublisher;
+        this.kitchenStationDirectory = kitchenStationDirectory;
     }
 
     @ApplicationModuleListener
     void on(KitchenTicketRequestedEvent event) {
-        printerForLocation(event.branchId(), "kitchen").ifPresent(printer -> {
+        // Falls back to "kitchen" if the station was deleted between the order being placed and the
+        // ticket being created — same station-not-found case KitchenTicketListener guards against.
+        String location = kitchenStationDirectory.findPrinterLocation(event.stationId()).orElse("kitchen");
+        printerForLocation(event.branchId(), location).ifPresent(printer -> {
             List<KitchenTicketContent.TicketItem> items = event.items() == null ? List.of() : event.items().stream()
                     .map(i -> new KitchenTicketContent.TicketItem(i.productName(), i.qty(), i.modifierNames()))
                     .toList();

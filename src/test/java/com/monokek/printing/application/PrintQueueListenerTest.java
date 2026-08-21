@@ -2,6 +2,7 @@ package com.monokek.printing.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.monokek.crm.domain.event.CouponPrintRequestedEvent;
+import com.monokek.kitchen.KitchenStationDirectory;
 import com.monokek.ordering.domain.event.KitchenTicketRequestedEvent;
 import com.monokek.printing.domain.PrintQueue;
 import com.monokek.printing.domain.PrintQueueRepository;
@@ -45,9 +46,12 @@ class PrintQueueListenerTest {
         NetworkPrintDispatcher networkPrintDispatcher = mock(NetworkPrintDispatcher.class);
         ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
         StoreSettings storeSettings = mock(StoreSettings.class);
+        KitchenStationDirectory kitchenStationDirectory = mock(KitchenStationDirectory.class);
+        when(kitchenStationDirectory.findPrinterLocation(9L)).thenReturn(Optional.of("kitchen"));
 
         PrintQueueListener listener = new PrintQueueListener(
-                printerRepository, printQueueRepository, objectMapper, storeSettings, networkPrintDispatcher, eventPublisher);
+                printerRepository, printQueueRepository, objectMapper, storeSettings, networkPrintDispatcher, eventPublisher,
+                kitchenStationDirectory);
 
         KitchenTicketRequestedEvent event = new KitchenTicketRequestedEvent(
                 1L, 2L, 3L, 9L, null, "Table 4", List.of(), "Awa");
@@ -88,14 +92,52 @@ class PrintQueueListenerTest {
         NetworkPrintDispatcher networkPrintDispatcher = mock(NetworkPrintDispatcher.class);
         ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
         StoreSettings storeSettings = mock(StoreSettings.class);
+        KitchenStationDirectory kitchenStationDirectory = mock(KitchenStationDirectory.class);
+        when(kitchenStationDirectory.findPrinterLocation(9L)).thenReturn(Optional.of("kitchen"));
 
         PrintQueueListener listener = new PrintQueueListener(
-                printerRepository, printQueueRepository, objectMapper, storeSettings, networkPrintDispatcher, eventPublisher);
+                printerRepository, printQueueRepository, objectMapper, storeSettings, networkPrintDispatcher, eventPublisher,
+                kitchenStationDirectory);
 
         listener.on(new KitchenTicketRequestedEvent(1L, 2L, 3L, 9L, null, "Table 4", List.of(), "Awa"));
 
         verify(networkPrintDispatcher).dispatch(eq(printer), eq(99L), eq("kitchen"), any());
         verify(eventPublisher, never()).publishEvent(any(PrintJobQueuedEvent.class));
+    }
+
+    @Test
+    void routesATicketToTheBranchsBarPrinterWhenTheStationIsABarStation() {
+        Printer printer = new Printer();
+        printer.setId(21L);
+        printer.setBranchId(3L);
+        printer.setLocation("bar");
+        printer.setConnection("network");
+        printer.setIp("192.168.1.70");
+
+        PrinterRepository printerRepository = mock(PrinterRepository.class);
+        when(printerRepository.findFirstByBranchIdAndLocationAndActiveTrue(3L, "bar")).thenReturn(Optional.of(printer));
+
+        PrintQueueRepository printQueueRepository = mock(PrintQueueRepository.class);
+        when(printQueueRepository.save(any(PrintQueue.class))).thenAnswer(inv -> {
+            PrintQueue job = inv.getArgument(0);
+            job.setId(77L);
+            return job;
+        });
+
+        NetworkPrintDispatcher networkPrintDispatcher = mock(NetworkPrintDispatcher.class);
+        ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
+        StoreSettings storeSettings = mock(StoreSettings.class);
+        KitchenStationDirectory kitchenStationDirectory = mock(KitchenStationDirectory.class);
+        when(kitchenStationDirectory.findPrinterLocation(14L)).thenReturn(Optional.of("bar"));
+
+        PrintQueueListener listener = new PrintQueueListener(
+                printerRepository, printQueueRepository, objectMapper, storeSettings, networkPrintDispatcher, eventPublisher,
+                kitchenStationDirectory);
+
+        listener.on(new KitchenTicketRequestedEvent(1L, 2L, 3L, 14L, null, "Table 4", List.of(), "Awa"));
+
+        verify(networkPrintDispatcher).dispatch(eq(printer), eq(77L), eq("kitchen"), any());
+        verify(printerRepository, never()).findFirstByBranchIdAndLocationAndActiveTrue(3L, "kitchen");
     }
 
     @Test
@@ -121,9 +163,11 @@ class PrintQueueListenerTest {
         ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
         StoreSettings storeSettings = mock(StoreSettings.class);
         when(storeSettings.current()).thenReturn(new StoreSettings.StoreInfo("Mono-Kek", "Douala", "699000000", null));
+        KitchenStationDirectory kitchenStationDirectory = mock(KitchenStationDirectory.class);
 
         PrintQueueListener listener = new PrintQueueListener(
-                printerRepository, printQueueRepository, objectMapper, storeSettings, networkPrintDispatcher, eventPublisher);
+                printerRepository, printQueueRepository, objectMapper, storeSettings, networkPrintDispatcher, eventPublisher,
+                kitchenStationDirectory);
 
         listener.on(new CouponPrintRequestedEvent(1L, "PROMO10", new BigDecimal("1000"), null, 3L));
 

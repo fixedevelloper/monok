@@ -5,8 +5,11 @@
  * (its {@code domain.event} named interface — {@code KitchenTicketRequestedEvent}/
  * {@code OrderPaidEvent}/{@code SessionReportReadyEvent}), on {@code crm}
  * (its {@code domain.event} named interface — {@code CouponPrintRequestedEvent},
- * raised on demand from the CRM screen rather than tied to an order) and on
- * {@code settings} ({@code StoreSettings}, for the receipt header + logo) —
+ * raised on demand from the CRM screen rather than tied to an order), on
+ * {@code settings} ({@code StoreSettings}, for the receipt header + logo) and on
+ * {@code kitchen} ({@code KitchenStationDirectory}, to route a
+ * {@code KitchenTicketRequestedEvent} to the printer matching its station's
+ * type instead of always the branch's {@code "kitchen"}-location one) —
  * same shape as {@code kitchen} and {@code inventory} depending on {@code ordering}'s events.
  *
  * <p>{@code application.PrintQueueListener} reacts to those four events,
