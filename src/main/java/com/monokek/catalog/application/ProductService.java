@@ -3,6 +3,8 @@ package com.monokek.catalog.application;
 import com.monokek.common.ApiException;
 import com.monokek.catalog.domain.*;
 import com.monokek.catalog.web.dto.*;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,6 +45,12 @@ public class ProductService {
     @Transactional(readOnly = true)
     public List<ProductDto> index(Long categoryId, String search, Long branchId) {
         return productRepository.searchActive(categoryId, blankToNull(search), branchId).stream().map(this::toDto).toList();
+    }
+
+    /** Backs the admin menu's infinite-scroll grid — one page request per branch section. */
+    @Transactional(readOnly = true)
+    public Page<ProductDto> indexPage(Long categoryId, String search, Long branchId, Pageable pageable) {
+        return productRepository.searchActivePage(categoryId, blankToNull(search), branchId, pageable).map(this::toDto);
     }
 
     @Transactional(readOnly = true)

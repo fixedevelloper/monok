@@ -1,5 +1,7 @@
 package com.monokek.catalog.domain;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.NoRepositoryBean;
 import org.springframework.data.repository.Repository;
@@ -36,4 +38,17 @@ public interface ProductRepository extends Repository<Product, Long> {
             ORDER BY p.name ASC
             """)
     List<Product> searchActive(@Param("categoryId") Long categoryId, @Param("search") String search, @Param("branchId") Long branchId);
+
+    /** Same filters as {@link #searchActive}, paginated — backs the admin menu's infinite-scroll
+     * grid (one independently-scrolled page request per branch section). */
+    @Query("""
+            SELECT p FROM Product p
+            WHERE p.active = true
+              AND (:categoryId IS NULL OR p.category.id = :categoryId)
+              AND (:search IS NULL OR LOWER(p.name) LIKE LOWER(CONCAT('%', :search, '%')))
+              AND (:branchId IS NULL OR p.category.branchId = :branchId)
+            ORDER BY p.name ASC
+            """)
+    Page<Product> searchActivePage(
+            @Param("categoryId") Long categoryId, @Param("search") String search, @Param("branchId") Long branchId, Pageable pageable);
 }

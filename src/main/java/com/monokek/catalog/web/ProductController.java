@@ -4,6 +4,9 @@ import com.monokek.catalog.application.ProductService;
 import com.monokek.catalog.web.dto.*;
 import com.monokek.identity.CurrentUser;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -41,6 +44,22 @@ public class ProductController {
             @RequestParam(required = false) Long categoryId, @RequestParam(required = false) String search,
             @AuthenticationPrincipal CurrentUser principal) {
         return productService.index(categoryId, search, principal.branchId());
+    }
+
+    /** Backs the admin menu's infinite-scroll grid — one independently-paginated request per
+     * branch section. {@code branchId} is client-supplied (unlike {@link #index}'s implicit
+     * "my own branch" scoping) since an unscoped owner picks which branch's section it's
+     * loading more of; a branch-scoped manager can't override it with someone else's branch. */
+    @GetMapping("/api/admin/products/page")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    public Page<ProductDto> indexPage(
+            @RequestParam(required = false) Long categoryId,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) Long branchId,
+            @AuthenticationPrincipal CurrentUser principal,
+            @PageableDefault(size = 20) Pageable pageable) {
+        Long effectiveBranchId = principal.branchId() != null ? principal.branchId() : branchId;
+        return productService.indexPage(categoryId, search, effectiveBranchId, pageable);
     }
 
     @GetMapping("/api/admin/products/{id}")
