@@ -81,6 +81,9 @@ public class OrderController {
         return ApiResponse.success(orderService.history(principal.id(), principal.branchId()));
     }
 
+    /** {@code branchId} is client-supplied (an unscoped owner picks which branch's tab it's
+     * viewing); a branch-scoped manager can't override it with someone else's branch — same
+     * effective-branch pattern as {@code ProductController#indexPage}. */
     @GetMapping("/api/admin/orders/history")
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ApiResponse<Page<OrderDto>> historyAdmin(
@@ -88,9 +91,11 @@ public class OrderController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) LocalDate startDate,
             @RequestParam(required = false) LocalDate endDate,
+            @RequestParam(required = false) Long branchId,
             @AuthenticationPrincipal CurrentUser principal,
             @PageableDefault(size = 50) Pageable pageable) {
-        return ApiResponse.success(orderService.historyAdmin(search, status, startDate, endDate, principal.branchId(), pageable));
+        Long effectiveBranchId = principal.branchId() != null ? principal.branchId() : branchId;
+        return ApiResponse.success(orderService.historyAdmin(search, status, startDate, endDate, effectiveBranchId, pageable));
     }
 
     @GetMapping("/api/pos/waiter/orders")

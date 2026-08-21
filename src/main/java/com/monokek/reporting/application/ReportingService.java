@@ -118,21 +118,30 @@ public class ReportingService {
         return new ClosingReportResponse(currentUserName, today.toString(), breakdown, total);
     }
 
+    /** {@code branchId} null means unscoped (owner/super-admin) — see {@code identity.CurrentUser#branchId}. */
     @Transactional(readOnly = true)
-    public AnalyticsResponse getAnalytics(LocalDate startDate, LocalDate endDate) {
+    public AnalyticsResponse getAnalytics(LocalDate startDate, LocalDate endDate, Long branchId) {
         LocalDate start = startDate != null ? startDate : YearMonth.now().atDay(1);
         LocalDate end = endDate != null ? endDate : YearMonth.now().atEndOfMonth();
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("start", start.atStartOfDay())
-                .addValue("end", end.plusDays(1).atStartOfDay());
+                .addValue("end", end.plusDays(1).atStartOfDay())
+                .addValue("branchId", branchId);
 
         BigDecimal totalSales = jdbc.queryForObject(
-                "SELECT COALESCE(SUM(amount), 0) FROM payments WHERE created_at >= :start AND created_at < :end",
-                params, BigDecimal.class);
+                """
+                SELECT COALESCE(SUM(p.amount), 0)
+                FROM payments p JOIN orders o ON p.order_id = o.id
+                WHERE p.created_at >= :start AND p.created_at < :end
+                  AND (:branchId IS NULL OR o.branch_id = :branchId)
+                """, params, BigDecimal.class);
 
         Long ordersCount = jdbc.queryForObject(
-                "SELECT COUNT(*) FROM orders WHERE created_at >= :start AND created_at < :end",
-                params, Long.class);
+                """
+                SELECT COUNT(*) FROM orders
+                WHERE created_at >= :start AND created_at < :end
+                  AND (:branchId IS NULL OR branch_id = :branchId)
+                """, params, Long.class);
 
         BigDecimal averageCart = ordersCount != null && ordersCount > 0
                 ? totalSales.divide(BigDecimal.valueOf(ordersCount), 2, RoundingMode.HALF_UP)
@@ -142,6 +151,7 @@ public class ReportingService {
                 """
                 SELECT HOUR(created_at) AS hr, COUNT(*) AS cnt FROM orders
                 WHERE created_at >= :start AND created_at < :end
+                  AND (:branchId IS NULL OR branch_id = :branchId)
                 GROUP BY hr ORDER BY hr
                 """, params,
                 (rs, rowNum) -> new AnalyticsResponse.HourlyFlow(rs.getInt("hr"), rs.getLong("cnt")));
@@ -151,6 +161,7 @@ public class ReportingService {
                 SELECT u.name AS waiter, SUM(o.total) AS sales, COUNT(o.id) AS cnt
                 FROM orders o JOIN users u ON o.user_id = u.id
                 WHERE o.created_at >= :start AND o.created_at < :end
+                  AND (:branchId IS NULL OR o.branch_id = :branchId)
                 GROUP BY u.id, u.name
                 ORDER BY sales DESC
                 LIMIT 5
@@ -160,8 +171,11 @@ public class ReportingService {
         List<PaymentMethodTotal> paymentsByMethod = jdbc.query(
                 """
                 SELECT pm.name AS method, COUNT(*) AS cnt, SUM(p.amount) AS total
-                FROM payments p JOIN payment_methods pm ON p.payment_method_id = pm.id
+                FROM payments p
+                JOIN payment_methods pm ON p.payment_method_id = pm.id
+                JOIN orders o ON p.order_id = o.id
                 WHERE p.created_at >= :start AND p.created_at < :end
+                  AND (:branchId IS NULL OR o.branch_id = :branchId)
                 GROUP BY pm.id, pm.name
                 ORDER BY total DESC
                 """, params,
@@ -171,6 +185,7 @@ public class ReportingService {
                 """
                 SELECT DATE(created_at) AS dt, SUM(total) AS total FROM orders
                 WHERE status = 'paid' AND created_at >= :start AND created_at < :end
+                  AND (:branchId IS NULL OR branch_id = :branchId)
                 GROUP BY dt ORDER BY dt
                 """, params,
                 (rs, rowNum) -> new AnalyticsResponse.SalesOverTime(rs.getDate("dt").toString(), rs.getBigDecimal("total")));
@@ -183,6 +198,7 @@ public class ReportingService {
                 JOIN order_rounds orr ON oi.order_round_id = orr.id
                 JOIN orders o ON orr.order_id = o.id
                 WHERE o.status = 'paid' AND o.created_at >= :start AND o.created_at < :end
+                  AND (:branchId IS NULL OR o.branch_id = :branchId)
                 GROUP BY p.id, p.name
                 ORDER BY qty DESC
                 LIMIT 5
@@ -231,6 +247,7 @@ public class ReportingService {
                 JOIN orders o ON orr.order_id = o.id
                 JOIN recipe_cost rc ON rc.product_id = oi.product_id
                 WHERE o.status = 'paid' AND o.created_at >= :start AND o.created_at < :end
+                  AND (:branchId IS NULL OR o.branch_id = :branchId)
                 """, params, BigDecimal.class);
 
         if (totalSales == null || totalSales.compareTo(BigDecimal.ZERO) <= 0) {

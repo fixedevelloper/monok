@@ -45,6 +45,9 @@ public class AccountingController {
         this.pdfReportWriter = pdfReportWriter;
     }
 
+    /** {@code branchId} is client-supplied (an unscoped owner picks which branch's tab it's
+     * exporting); a branch-scoped manager can't override it with someone else's branch — same
+     * effective-branch pattern as {@code ProductController#indexPage}. */
     @GetMapping("/{report}")
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('view_reports'))")
     public ResponseEntity<byte[]> export(
@@ -52,8 +55,10 @@ public class AccountingController {
             @RequestParam("start_date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam("end_date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
             @RequestParam String format,
+            @RequestParam(required = false) Long branchId,
             @AuthenticationPrincipal CurrentUser principal) {
-        ReportTable table = accountingService.build(report, startDate, endDate, principal.branchId());
+        Long effectiveBranchId = principal.branchId() != null ? principal.branchId() : branchId;
+        ReportTable table = accountingService.build(report, startDate, endDate, effectiveBranchId);
 
         byte[] body;
         MediaType contentType;

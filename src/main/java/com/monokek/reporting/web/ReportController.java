@@ -54,11 +54,17 @@ public class ReportController {
         return reportingService.closingReport(currentUser.id(), currentUser.name());
     }
 
+    /** {@code branchId} is client-supplied (an unscoped owner picks which branch's tab it's
+     * loading); a branch-scoped manager can't override it with someone else's branch — same
+     * effective-branch pattern as {@code ProductController#indexPage}. */
     @GetMapping("/api/admin/analytics")
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('view_analytics'))")
     public AnalyticsResponse getAnalytics(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
-        return reportingService.getAnalytics(startDate, endDate);
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(required = false) Long branchId,
+            @AuthenticationPrincipal CurrentUser principal) {
+        Long effectiveBranchId = principal.branchId() != null ? principal.branchId() : branchId;
+        return reportingService.getAnalytics(startDate, endDate, effectiveBranchId);
     }
 }
