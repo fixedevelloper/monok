@@ -5,10 +5,12 @@ import com.monokek.accounting.application.ExcelReportWriter;
 import com.monokek.accounting.application.PdfReportWriter;
 import com.monokek.accounting.application.ReportTable;
 import com.monokek.common.ApiException;
+import com.monokek.identity.CurrentUser;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -49,8 +51,9 @@ public class AccountingController {
             @PathVariable String report,
             @RequestParam("start_date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam("end_date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
-            @RequestParam String format) {
-        ReportTable table = accountingService.build(report, startDate, endDate);
+            @RequestParam String format,
+            @AuthenticationPrincipal CurrentUser principal) {
+        ReportTable table = accountingService.build(report, startDate, endDate, principal.branchId());
 
         byte[] body;
         MediaType contentType;

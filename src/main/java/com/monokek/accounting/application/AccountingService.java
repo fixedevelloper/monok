@@ -25,7 +25,7 @@ import java.util.function.Function;
 public class AccountingService {
 
     private final NamedParameterJdbcTemplate jdbc;
-    private final Map<String, Function<DateRange, ReportTable>> builders = Map.of(
+    private final Map<String, Function<ReportParams, ReportTable>> builders = Map.of(
             "sales-summary", this::salesSummary,
             "payments-breakdown", this::paymentsBreakdown,
             "detailed-sales", this::detailedSales,
@@ -36,29 +36,31 @@ public class AccountingService {
         this.jdbc = jdbc;
     }
 
-    /** @throws ApiException 400 if {@code report} isn't one of the four keys the frontend can request. */
+    /** {@code branchId} null means unscoped (owner/super-admin) — see {@code identity.CurrentUser#branchId}.
+     * @throws ApiException 400 if {@code report} isn't one of the four keys the frontend can request. */
     @Transactional(readOnly = true)
-    public ReportTable build(String report, LocalDate startDate, LocalDate endDate) {
-        Function<DateRange, ReportTable> builder = builders.get(report);
+    public ReportTable build(String report, LocalDate startDate, LocalDate endDate, Long branchId) {
+        Function<ReportParams, ReportTable> builder = builders.get(report);
         if (builder == null) {
             throw ApiException.badRequest("Rapport comptable inconnu : " + report);
         }
         if (startDate == null || endDate == null || endDate.isBefore(startDate)) {
             throw ApiException.badRequest("Période invalide.");
         }
-        return builder.apply(new DateRange(startDate, endDate));
+        return builder.apply(new ReportParams(startDate, endDate, branchId));
     }
 
     /** "Journal Général des Ventes" — Z de caisse cumulé jour par jour, avec une ligne TOTAL en pied de journal. */
-    private ReportTable salesSummary(DateRange range) {
+    private ReportTable salesSummary(ReportParams params) {
         List<List<Object>> rows = jdbc.query(
                 """
                 SELECT DATE(paid_at) AS jour, COUNT(*) AS nb, SUM(total) AS brut, SUM(tax) AS tva, SUM(total - tax) AS net
                 FROM orders
                 WHERE status = 'paid' AND paid_at >= :start AND paid_at < :end
+                  AND (:branchId IS NULL OR branch_id = :branchId)
                 GROUP BY DATE(paid_at)
                 ORDER BY jour
-                """, range.params(),
+                """, params.sqlParams(),
                 (rs, i) -> List.<Object>of(
                         rs.getDate("jour").toLocalDate().toString(),
                         rs.getLong("nb"),
@@ -67,12 +69,12 @@ public class AccountingService {
                         rs.getBigDecimal("net")));
 
         rows = withTotalRow(rows, List.of(1, 2, 3, 4), "TOTAL");
-        return new ReportTable("Journal Général des Ventes", range.start(), range.end(),
+        return new ReportTable("Journal Général des Ventes", params.start(), params.end(),
                 List.of("Date", "Nb Commandes", "CA Brut TTC", "TVA", "CA Net HT"), rows);
     }
 
     /** "Rapport des Règlements" — un encaissement par ligne, avec la référence de transaction pour le rapprochement bancaire. */
-    private ReportTable paymentsBreakdown(DateRange range) {
+    private ReportTable paymentsBreakdown(ReportParams params) {
         List<List<Object>> rows = jdbc.query(
                 """
                 SELECT p.created_at AS dt, o.reference AS ref, pm.name AS method, p.amount AS amount, p.reference AS txn_ref
@@ -80,8 +82,9 @@ public class AccountingService {
                 JOIN payment_methods pm ON p.payment_method_id = pm.id
                 JOIN orders o ON p.order_id = o.id
                 WHERE p.created_at >= :start AND p.created_at < :end
+                  AND (:branchId IS NULL OR o.branch_id = :branchId)
                 ORDER BY p.created_at
-                """, range.params(),
+                """, params.sqlParams(),
                 (rs, i) -> List.<Object>of(
                         rs.getTimestamp("dt").toLocalDateTime().toString(),
                         rs.getString("ref"),
@@ -90,12 +93,12 @@ public class AccountingService {
                         rs.getString("txn_ref") == null ? "" : rs.getString("txn_ref")));
 
         rows = withTotalRow(rows, List.of(3), "TOTAL");
-        return new ReportTable("Rapport des Règlements", range.start(), range.end(),
+        return new ReportTable("Rapport des Règlements", params.start(), params.end(),
                 List.of("Date", "N° Facture", "Mode de Règlement", "Montant", "Référence Transaction"), rows);
     }
 
     /** "Journal Détaillé des Factures" — une ligne par article vendu, pour l'audit unitaire. */
-    private ReportTable detailedSales(DateRange range) {
+    private ReportTable detailedSales(ReportParams params) {
         List<List<Object>> rows = jdbc.query(
                 """
                 SELECT o.paid_at AS dt, o.reference AS ref, pr.name AS product, oi.qty AS qty, oi.price AS pu, oi.total AS total
@@ -104,8 +107,9 @@ public class AccountingService {
                 JOIN orders o ON orr.order_id = o.id
                 JOIN products pr ON oi.product_id = pr.id
                 WHERE o.status = 'paid' AND o.paid_at >= :start AND o.paid_at < :end
+                  AND (:branchId IS NULL OR o.branch_id = :branchId)
                 ORDER BY o.paid_at, o.reference
-                """, range.params(),
+                """, params.sqlParams(),
                 (rs, i) -> List.<Object>of(
                         rs.getTimestamp("dt").toLocalDateTime().toString(),
                         rs.getString("ref"),
@@ -115,12 +119,12 @@ public class AccountingService {
                         rs.getBigDecimal("total")));
 
         rows = withTotalRow(rows, List.of(5), "TOTAL");
-        return new ReportTable("Journal Détaillé des Factures", range.start(), range.end(),
+        return new ReportTable("Journal Détaillé des Factures", params.start(), params.end(),
                 List.of("Date", "N° Facture", "Produit", "Qté", "PU", "Total Ligne"), rows);
     }
 
     /** "Ventes par Catégorie de Produits" — répartition du CA par pôle d'activité. */
-    private ReportTable categoriesSales(DateRange range) {
+    private ReportTable categoriesSales(ReportParams params) {
         List<List<Object>> rows = jdbc.query(
                 """
                 SELECT c.name AS categorie, SUM(oi.total) AS ca
@@ -130,13 +134,14 @@ public class AccountingService {
                 JOIN products pr ON oi.product_id = pr.id
                 JOIN categories c ON pr.category_id = c.id
                 WHERE o.status = 'paid' AND o.paid_at >= :start AND o.paid_at < :end
+                  AND (:branchId IS NULL OR o.branch_id = :branchId)
                 GROUP BY c.id, c.name
                 ORDER BY ca DESC
-                """, range.params(),
+                """, params.sqlParams(),
                 (rs, i) -> List.<Object>of(rs.getString("categorie"), rs.getBigDecimal("ca")));
 
         rows = withTotalRow(rows, List.of(1), "TOTAL");
-        return new ReportTable("Ventes par Catégorie de Produits", range.start(), range.end(),
+        return new ReportTable("Ventes par Catégorie de Produits", params.start(), params.end(),
                 List.of("Catégorie", "Chiffre d'Affaires"), rows);
     }
 
@@ -173,11 +178,12 @@ public class AccountingService {
         return sum;
     }
 
-    private record DateRange(LocalDate start, LocalDate end) {
-        MapSqlParameterSource params() {
+    private record ReportParams(LocalDate start, LocalDate end, Long branchId) {
+        MapSqlParameterSource sqlParams() {
             return new MapSqlParameterSource()
                     .addValue("start", LocalDateTime.of(start, java.time.LocalTime.MIDNIGHT))
-                    .addValue("end", LocalDateTime.of(end.plusDays(1), java.time.LocalTime.MIDNIGHT));
+                    .addValue("end", LocalDateTime.of(end.plusDays(1), java.time.LocalTime.MIDNIGHT))
+                    .addValue("branchId", branchId);
         }
     }
 }

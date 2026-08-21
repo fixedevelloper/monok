@@ -71,13 +71,14 @@ public class OrderController {
             @RequestParam(required = false) String search,
             @RequestParam(required = false) LocalDate date,
             @RequestParam(required = false) String status,
+            @AuthenticationPrincipal CurrentUser principal,
             @PageableDefault(size = 15) Pageable pageable) {
-        return orderService.index(search, date, status, pageable);
+        return orderService.index(search, date, status, principal.branchId(), pageable);
     }
 
     @GetMapping("/api/pos/orders/history")
     public ApiResponse<List<OrderDto>> history(@AuthenticationPrincipal CurrentUser principal) {
-        return ApiResponse.success(orderService.history(principal.id()));
+        return ApiResponse.success(orderService.history(principal.id(), principal.branchId()));
     }
 
     @GetMapping("/api/admin/orders/history")
@@ -87,8 +88,9 @@ public class OrderController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) LocalDate startDate,
             @RequestParam(required = false) LocalDate endDate,
+            @AuthenticationPrincipal CurrentUser principal,
             @PageableDefault(size = 50) Pageable pageable) {
-        return ApiResponse.success(orderService.historyAdmin(search, status, startDate, endDate, pageable));
+        return ApiResponse.success(orderService.historyAdmin(search, status, startDate, endDate, principal.branchId(), pageable));
     }
 
     @GetMapping("/api/pos/waiter/orders")

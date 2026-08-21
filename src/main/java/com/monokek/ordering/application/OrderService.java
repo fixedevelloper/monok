@@ -302,13 +302,13 @@ public class OrderService {
     }
 
     @Transactional(readOnly = true)
-    public List<OrderDto> history(Long cashierUserId) {
+    public List<OrderDto> history(Long cashierUserId, Long branchId) {
         Long sessionId = cashierFacade.findOpenSessionId(cashierUserId)
                 .orElseThrow(() -> ApiException.badRequest("Session de caisse introuvable."));
 
         List<Order> paid = orderRepository.findByIdIn(cashierFacade.orderIdsPaidInSession(sessionId));
-        List<Order> activeToday = orderRepository.findByStatusNotInAndCreatedAtAfter(
-                List.of("cancelled", "paid"), LocalDate.now().atStartOfDay());
+        List<Order> activeToday = orderRepository.findActiveToday(
+                branchId, List.of("cancelled", "paid"), LocalDate.now().atStartOfDay());
 
         Map<Long, Order> merged = new LinkedHashMap<>();
         Stream.concat(paid.stream(), activeToday.stream()).forEach(o -> merged.put(o.getId(), o));
@@ -321,18 +321,18 @@ public class OrderService {
     }
 
     @Transactional(readOnly = true)
-    public Page<OrderDto> historyAdmin(String search, String status, LocalDate startDate, LocalDate endDate, Pageable pageable) {
+    public Page<OrderDto> historyAdmin(String search, String status, LocalDate startDate, LocalDate endDate, Long branchId, Pageable pageable) {
         LocalDateTime from = startDate == null ? null : startDate.atStartOfDay();
         LocalDateTime to = endDate == null ? null : endDate.atTime(LocalTime.MAX);
-        return orderRepository.search(blankToNull(search), blankToNull(status), from, to, pageable).map(this::toDto);
+        return orderRepository.search(blankToNull(search), blankToNull(status), from, to, branchId, pageable).map(this::toDto);
     }
 
     @Transactional(readOnly = true)
-    public Page<OrderDto> index(String search, LocalDate date, String status, Pageable pageable) {
+    public Page<OrderDto> index(String search, LocalDate date, String status, Long branchId, Pageable pageable) {
         LocalDateTime from = date == null ? null : date.atStartOfDay();
         LocalDateTime to = date == null ? null : date.atTime(LocalTime.MAX);
         String effectiveStatus = "all".equalsIgnoreCase(status) ? null : blankToNull(status);
-        return orderRepository.search(blankToNull(search), effectiveStatus, from, to, pageable).map(this::toDto);
+        return orderRepository.search(blankToNull(search), effectiveStatus, from, to, branchId, pageable).map(this::toDto);
     }
 
     /** A virtual table never "resumes" a previous order — see {@link #resolveOrderForSendRound}. */
