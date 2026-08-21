@@ -33,20 +33,23 @@ public interface OrderRepository extends Repository<Order, Long> {
 
     List<Order> findByIdIn(List<Long> ids);
 
-    /** {@code branchId} null means unscoped (owner/super-admin) — see {@code identity.CurrentUser#branchId}. */
+    /** Every order still "open" (not cancelled/paid) for the branch, regardless of which day it
+     * started — a tab opened yesterday and never settled is exactly as active as one opened five
+     * minutes ago, so this must NOT filter by {@code createdAt} (it used to, via a now-removed
+     * {@code after} param: any order older than "today" silently vanished from the POS sales
+     * screen's list even though it was still genuinely open — see {@code OrderService#history}).
+     * {@code branchId} null means unscoped (owner/super-admin) — see {@code identity.CurrentUser#branchId}. */
     @Query("""
             SELECT o FROM Order o
             WHERE (:branchId IS NULL OR o.branchId = :branchId)
               AND o.status NOT IN :excludedStatuses
-              AND o.createdAt >= :after
             """)
-    List<Order> findActiveToday(
-            @Param("branchId") Long branchId, @Param("excludedStatuses") List<String> excludedStatuses, @Param("after") LocalDateTime after);
+    List<Order> findActive(@Param("branchId") Long branchId, @Param("excludedStatuses") List<String> excludedStatuses);
 
     List<Order> findByUserIdAndCreatedAtBetween(Long userId, LocalDateTime start, LocalDateTime end);
 
     /** Port of {@code OrderController::index}/{@code historyAdmin} — every filter is optional,
-     * {@code branchId} the same null-means-unscoped convention as {@link #findActiveToday}. */
+     * {@code branchId} the same null-means-unscoped convention as {@link #findActive}. */
     @Query("""
             SELECT o FROM Order o
             WHERE (:search IS NULL OR LOWER(o.reference) LIKE LOWER(CONCAT('%', :search, '%')))

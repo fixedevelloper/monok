@@ -313,11 +313,10 @@ public class OrderService {
                 .orElseThrow(() -> ApiException.badRequest("Session de caisse introuvable."));
 
         List<Order> paid = orderRepository.findByIdIn(cashierFacade.orderIdsPaidInSession(sessionId));
-        List<Order> activeToday = orderRepository.findActiveToday(
-                branchId, List.of("cancelled", "paid"), LocalDate.now().atStartOfDay());
+        List<Order> active = orderRepository.findActive(branchId, List.of("cancelled", "paid"));
 
         Map<Long, Order> merged = new LinkedHashMap<>();
-        Stream.concat(paid.stream(), activeToday.stream()).forEach(o -> merged.put(o.getId(), o));
+        Stream.concat(paid.stream(), active.stream()).forEach(o -> merged.put(o.getId(), o));
 
         return merged.values().stream()
                 .sorted(Comparator.comparing(Order::getId).reversed())
