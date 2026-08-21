@@ -41,8 +41,8 @@ public class ProductService {
     }
 
     @Transactional(readOnly = true)
-    public List<ProductDto> index(Long categoryId, String search) {
-        return productRepository.searchActive(categoryId, blankToNull(search)).stream().map(this::toDto).toList();
+    public List<ProductDto> index(Long categoryId, String search, Long branchId) {
+        return productRepository.searchActive(categoryId, blankToNull(search), branchId).stream().map(this::toDto).toList();
     }
 
     @Transactional(readOnly = true)
@@ -191,7 +191,8 @@ public class ProductService {
                 .toList();
 
         return new ProductDto(
-                product.getId(), product.getCategory().getId(), product.getCategory().getName(), product.getSku(),
+                product.getId(), product.getCategory().getId(), product.getCategory().getName(),
+                product.getCategory().getBranchId(), product.getSku(),
                 product.getName(), product.getDescription(), product.getPrice(), product.getIncentiveAmount(),
                 formatFcfa(product.getPrice()), product.isActive(), product.isTrackStock(), product.getStockCount(),
                 product.getAlertStock(), product.getType(), product.getImage(), modifiers

@@ -49,7 +49,8 @@ class ProductCatalogService implements ProductCatalog {
 
     private ProductSnapshot toSnapshot(Product product) {
         Long kitchenStationId = product.getCategory() == null ? null : product.getCategory().getKitchenStationId();
+        Long branchId = product.getCategory() == null ? null : product.getCategory().getBranchId();
         return new ProductSnapshot(
-                product.getId(), product.getName(), product.getPrice(), product.getIncentiveAmount(), kitchenStationId);
+                product.getId(), product.getName(), product.getPrice(), product.getIncentiveAmount(), kitchenStationId, branchId);
     }
 }

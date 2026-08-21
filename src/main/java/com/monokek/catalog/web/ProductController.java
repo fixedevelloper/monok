@@ -2,9 +2,11 @@ package com.monokek.catalog.web;
 
 import com.monokek.catalog.application.ProductService;
 import com.monokek.catalog.web.dto.*;
+import com.monokek.identity.CurrentUser;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -27,14 +29,18 @@ public class ProductController {
     }
 
     @GetMapping("/api/pos/products")
-    public List<ProductDto> posIndex(@RequestParam(required = false) Long categoryId, @RequestParam(required = false) String search) {
-        return productService.index(categoryId, search);
+    public List<ProductDto> posIndex(
+            @RequestParam(required = false) Long categoryId, @RequestParam(required = false) String search,
+            @AuthenticationPrincipal CurrentUser principal) {
+        return productService.index(categoryId, search, principal.branchId());
     }
 
     @GetMapping("/api/admin/products")
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
-    public List<ProductDto> index(@RequestParam(required = false) Long categoryId, @RequestParam(required = false) String search) {
-        return productService.index(categoryId, search);
+    public List<ProductDto> index(
+            @RequestParam(required = false) Long categoryId, @RequestParam(required = false) String search,
+            @AuthenticationPrincipal CurrentUser principal) {
+        return productService.index(categoryId, search, principal.branchId());
     }
 
     @GetMapping("/api/admin/products/{id}")

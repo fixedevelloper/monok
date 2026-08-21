@@ -8,6 +8,7 @@ public record ProductDto(
         Long id,
         Long categoryId,
         String categoryName,
+        Long branchId,
         String sku,
         String name,
         String description,

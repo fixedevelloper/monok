@@ -96,6 +96,12 @@ public class OrderService {
             ProductCatalog.ProductSnapshot product = productCatalog.findProduct(line.productId())
                     .orElseThrow(() -> ApiException.badRequest("Produit introuvable : " + line.productId()));
 
+            if (product.branchId() != null && !product.branchId().equals(table.branchId())) {
+                skipped.add(new SendRoundResult.SkippedItem(
+                        null, product.id(), product.name(), "Ce produit appartient à une autre branche."));
+                continue;
+            }
+
             OrderItem item = round.addItem(product.id(), null, line.qty(), product.price());
             addModifiers(item, line.modifiers());
 
@@ -427,6 +433,10 @@ public class OrderService {
 
         ProductCatalog.ProductSnapshot product = productCatalog.findProduct(request.productId())
                 .orElseThrow(() -> ApiException.badRequest("Produit introuvable : " + request.productId()));
+
+        if (product.branchId() != null && !product.branchId().equals(round.getOrder().getBranchId())) {
+            throw ApiException.badRequest("Ce produit appartient à une autre branche.");
+        }
 
         OrderItem item = round.addItem(product.id(), null, request.qty(), product.price());
         addModifiers(item, request.modifiers());

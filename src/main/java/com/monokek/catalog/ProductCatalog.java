@@ -20,7 +20,8 @@ public interface ProductCatalog {
 
     Optional<ModifierItemSnapshot> findModifierItem(Long modifierItemId);
 
-    record ProductSnapshot(Long id, String name, BigDecimal price, BigDecimal incentiveAmount, Long kitchenStationId) {
+    /** {@code branchId} is the product's category's branch — null means shared across every branch. */
+    record ProductSnapshot(Long id, String name, BigDecimal price, BigDecimal incentiveAmount, Long kitchenStationId, Long branchId) {
     }
 
     record VariantSnapshot(Long id, String name, BigDecimal price) {
