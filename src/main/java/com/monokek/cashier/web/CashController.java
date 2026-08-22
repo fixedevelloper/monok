@@ -4,6 +4,9 @@ import com.monokek.cashier.application.CashierService;
 import com.monokek.cashier.web.dto.*;
 import com.monokek.identity.CurrentUser;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -55,6 +58,21 @@ public class CashController {
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public void destroyRegister(@PathVariable Long id) {
         cashierService.deleteRegister(id);
+    }
+
+    /** Backs the admin/accounting "export a shift's orders" picker — till configuration-adjacent,
+     * same reasoning as {@link #storeRegister} above for why this needs its own gate.
+     * {@code branchId} is client-supplied (an unscoped owner picks which branch's tab it's
+     * browsing); a branch-scoped manager can't override it with someone else's branch — same
+     * effective-branch pattern as {@code ProductController#indexPage}. */
+    @GetMapping("/sessions")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    public Page<CashSessionAdminDto> listSessions(
+            @RequestParam(required = false) Long branchId,
+            @AuthenticationPrincipal CurrentUser principal,
+            @PageableDefault(size = 20) Pageable pageable) {
+        Long effectiveBranchId = principal.branchId() != null ? principal.branchId() : branchId;
+        return cashierService.listSessions(effectiveBranchId, pageable);
     }
 
     @GetMapping("/status")

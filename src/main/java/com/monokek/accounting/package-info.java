@@ -21,7 +21,10 @@
  * application.ExcelReportWriter}/{@code PdfReportWriter} render that same
  * table to real {@code .xlsx} (Apache POI) or {@code .pdf} (PDFBox) bytes —
  * one renderer per format, not one per report, since every report is just a
- * titled table.
+ * titled table. {@code PdfReportWriter} also depends on {@code settings}
+ * ({@code StoreSettings}, for the store name/address/phone in the PDF's
+ * header) — same published-interface dependency {@code printing} already
+ * has on it for the receipt header.
  */
 @org.springframework.modulith.ApplicationModule(displayName = "Accounting")
 package com.monokek.accounting;

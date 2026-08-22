@@ -1,6 +1,7 @@
 package com.monokek.accounting.application;
 
 import com.monokek.common.ApiException;
+import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -48,6 +49,76 @@ public class AccountingService {
             throw ApiException.badRequest("Période invalide.");
         }
         return builder.apply(new ReportParams(startDate, endDate, branchId));
+    }
+
+    /** "Commandes du Shift" — every payment settled during one cash-register session (a shift:
+     * open-to-close on one till), for the accountant to reconcile against that till's physical
+     * cash count. {@code effectiveBranchId} null means unscoped (owner/super-admin); otherwise
+     * a session belonging to another branch 404s exactly like one that doesn't exist at all,
+     * rather than leaking that it does — same reasoning as everywhere else a caller could
+     * otherwise probe ids outside their own branch.
+     * @throws ApiException 404 if the session doesn't exist or belongs to another branch. */
+    @Transactional(readOnly = true)
+    public ReportTable buildForSession(Long sessionId, Long effectiveBranchId) {
+        SessionInfo session = findSession(sessionId);
+        if (session == null || (effectiveBranchId != null && !effectiveBranchId.equals(session.branchId()))) {
+            throw ApiException.notFound("Session de caisse introuvable.");
+        }
+
+        MapSqlParameterSource sessionParams = new MapSqlParameterSource("sessionId", sessionId);
+        List<List<Object>> rows = jdbc.query(
+                """
+                SELECT p.created_at AS dt, o.reference AS ref, t.name AS table_name, u.name AS waiter,
+                       pm.name AS method, p.amount AS amount
+                FROM payments p
+                JOIN orders o ON p.order_id = o.id
+                LEFT JOIN restaurant_tables t ON o.table_id = t.id
+                LEFT JOIN users u ON o.user_id = u.id
+                JOIN payment_methods pm ON p.payment_method_id = pm.id
+                WHERE p.cash_session_id = :sessionId
+                ORDER BY p.created_at
+                """, sessionParams,
+                (rs, i) -> List.<Object>of(
+                        rs.getTimestamp("dt").toLocalDateTime().toString(),
+                        rs.getString("ref"),
+                        rs.getString("table_name") == null ? "Emporter" : rs.getString("table_name"),
+                        rs.getString("waiter") == null ? "" : rs.getString("waiter"),
+                        rs.getString("method"),
+                        rs.getBigDecimal("amount")));
+
+        rows = withTotalRow(rows, List.of(5), "TOTAL");
+        // "-" not "—" : PdfReportWriter's WinAnsi encoding can't render an em dash (drops to "?").
+        String title = "Commandes du Shift - %s (%s)".formatted(session.registerName(), session.cashierName());
+        LocalDate start = session.openedAt().toLocalDate();
+        LocalDate end = (session.closedAt() != null ? session.closedAt() : session.openedAt()).toLocalDate();
+        return new ReportTable(title, start, end,
+                List.of("Heure", "N° Facture", "Table", "Serveur", "Mode de Règlement", "Montant"), rows);
+    }
+
+    private SessionInfo findSession(Long sessionId) {
+        try {
+            return jdbc.queryForObject(
+                    """
+                    SELECT cs.opened_at, cs.closed_at, cr.branch_id, cr.name AS register_name,
+                           COALESCE(u.name, 'Utilisateur inconnu') AS cashier_name
+                    FROM cash_sessions cs
+                    JOIN cash_registers cr ON cs.register_id = cr.id
+                    LEFT JOIN users u ON cs.user_id = u.id
+                    WHERE cs.id = :sessionId
+                    """,
+                    new MapSqlParameterSource("sessionId", sessionId),
+                    (rs, i) -> new SessionInfo(
+                            rs.getTimestamp("opened_at").toLocalDateTime(),
+                            rs.getTimestamp("closed_at") == null ? null : rs.getTimestamp("closed_at").toLocalDateTime(),
+                            rs.getObject("branch_id", Long.class),
+                            rs.getString("register_name"),
+                            rs.getString("cashier_name")));
+        } catch (EmptyResultDataAccessException e) {
+            return null;
+        }
+    }
+
+    private record SessionInfo(LocalDateTime openedAt, LocalDateTime closedAt, Long branchId, String registerName, String cashierName) {
     }
 
     /** "Journal Général des Ventes" — Z de caisse cumulé jour par jour, avec une ligne TOTAL en pied de journal. */

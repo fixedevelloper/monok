@@ -6,6 +6,8 @@ import com.monokek.cashier.web.dto.*;
 import com.monokek.common.ApiException;
 import com.monokek.identity.UserDirectory;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -114,6 +116,30 @@ public class CashierService {
             throw ApiException.conflict("Impossible de supprimer une caisse ayant déjà des sessions enregistrées.");
         }
         cashRegisterRepository.deleteById(id);
+    }
+
+    /** Every shift (open or closed), most recent first — backs the admin "export a shift's
+     * orders" screen (see {@code accounting.AccountingService#buildForSession}). {@code branchId}
+     * null means unscoped (owner/super-admin) — same rule as {@link #listRegisters}. */
+    @Transactional(readOnly = true)
+    public Page<CashSessionAdminDto> listSessions(Long branchId, Pageable pageable) {
+        Page<CashSession> sessions = cashSessionRepository.findAllForBranch(branchId, pageable);
+        Map<Long, String> namesByUserId = userDirectory.namesByIds(
+                sessions.stream().map(CashSession::getUserId).collect(Collectors.toSet()));
+        return sessions.map(session -> new CashSessionAdminDto(
+                session.getId(),
+                session.getRegister().getId(),
+                session.getRegister().getName(),
+                session.getRegister().getBranchId(),
+                session.getUserId(),
+                namesByUserId.get(session.getUserId()),
+                session.getOpeningAmount(),
+                session.getClosingAmount(),
+                session.getExpectedAmount(),
+                format(session.getOpenedAt()),
+                format(session.getClosedAt()),
+                session.isOpen()
+        ));
     }
 
     @Transactional(readOnly = true)

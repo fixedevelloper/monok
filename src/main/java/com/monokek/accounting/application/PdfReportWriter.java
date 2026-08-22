@@ -1,5 +1,6 @@
 package com.monokek.accounting.application;
 
+import com.monokek.settings.StoreSettings;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
@@ -9,30 +10,57 @@ import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.springframework.stereotype.Component;
 
+import java.awt.Color;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
- * Renders any {@link ReportTable} to a plain, functional tabular PDF
- * (PDFBox) — one generic writer for all four accounting reports, same
- * reasoning as {@link ExcelReportWriter}. No layout library: a title, a
- * bold header row, left-aligned text / right-aligned numbers, and automatic
- * pagination when a page fills up.
+ * Renders any {@link ReportTable} to a branded tabular PDF (PDFBox) — one
+ * generic writer for all four accounting reports, same reasoning as
+ * {@link ExcelReportWriter}. No layout library: a store-identity header
+ * (name/address/phone from {@link StoreSettings}, same source the receipt
+ * printer uses), an accent-colored table header + light zebra striping for
+ * readability, and a page footer (generation timestamp + page numbers) —
+ * "official document for the expert-comptable" territory, not a raw data
+ * dump. Pagination is automatic when a page fills up.
  */
 @Component
 public class PdfReportWriter {
 
     private static final float MARGIN = 40f;
-    private static final float ROW_HEIGHT = 16f;
+    private static final float ROW_HEIGHT = 18f;
     private static final float FONT_SIZE = 9f;
     private static final float TITLE_FONT_SIZE = 14f;
+    private static final float STORE_NAME_FONT_SIZE = 15f;
+    private static final float STORE_INFO_FONT_SIZE = 8.5f;
+    private static final float FOOTER_FONT_SIZE = 7.5f;
+    private static final float FOOTER_HEIGHT = 24f;
+
+    /** Matches the accent color already used for the analytics report PDF (useExport.tsx) and
+     * the app's own UI — one consistent brand color across every exported document. */
+    private static final Color ACCENT = new Color(79, 70, 229);
+    private static final Color ACCENT_TINT = new Color(238, 237, 252);
+    private static final Color ZEBRA_TINT = new Color(247, 247, 252);
+    private static final Color GRAY = new Color(110, 110, 110);
+    private static final Color RULE_GRAY = new Color(225, 225, 230);
+
+    private final StoreSettings storeSettings;
+
+    public PdfReportWriter(StoreSettings storeSettings) {
+        this.storeSettings = storeSettings;
+    }
 
     public byte[] write(ReportTable table) {
+        StoreSettings.StoreInfo store = storeSettings.current();
+        LocalDateTime generatedAt = LocalDateTime.now();
+
         try (PDDocument document = new PDDocument()) {
             PDFont regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
             PDFont bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
@@ -45,19 +73,25 @@ public class PdfReportWriter {
 
             PageCursor cursor = new PageCursor(document, pageWidth, pageHeight);
             cursor.newPage();
+            drawStoreHeader(cursor, regular, bold, store);
             drawTitle(cursor, regular, bold, table);
             drawHeaderRow(cursor, bold, table.headers(), columnWidths, rightAligned);
 
             int lastIndex = table.rows().size() - 1;
             for (int r = 0; r < table.rows().size(); r++) {
                 boolean isTotalRow = r == lastIndex && "TOTAL".equals(String.valueOf(table.rows().get(r).get(0)));
-                if (cursor.y - ROW_HEIGHT < MARGIN) {
+                if (cursor.y - ROW_HEIGHT < MARGIN + FOOTER_HEIGHT) {
                     cursor.newPage();
                     drawHeaderRow(cursor, bold, table.headers(), columnWidths, rightAligned);
                 }
-                drawDataRow(cursor, isTotalRow ? bold : regular, table.rows().get(r), columnWidths, rightAligned);
+                if (!isTotalRow && r % 2 == 1) {
+                    cursor.fillRect(MARGIN, cursor.y - ROW_HEIGHT + 4, sum(columnWidths), ROW_HEIGHT, ZEBRA_TINT);
+                }
+                drawDataRow(cursor, isTotalRow ? bold : regular, isTotalRow, table.rows().get(r), columnWidths, rightAligned);
             }
             cursor.close();
+
+            drawFooters(document, regular, pageWidth, generatedAt);
 
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             document.save(out);
@@ -67,44 +101,97 @@ public class PdfReportWriter {
         }
     }
 
+    private void drawStoreHeader(PageCursor cursor, PDFont regular, PDFont bold, StoreSettings.StoreInfo store) throws IOException {
+        String name = store.name() == null || store.name().isBlank() ? "Mono-Kek" : store.name();
+        cursor.text(bold, STORE_NAME_FONT_SIZE, ACCENT, MARGIN, cursor.y, name);
+        cursor.y -= STORE_NAME_FONT_SIZE + 4;
+
+        String contact = String.join("  ·  ",
+                java.util.stream.Stream.of(store.address(), store.phone()).filter(s -> s != null && !s.isBlank()).toList());
+        if (!contact.isEmpty()) {
+            cursor.text(regular, STORE_INFO_FONT_SIZE, GRAY, MARGIN, cursor.y, contact);
+            cursor.y -= STORE_INFO_FONT_SIZE + 8;
+        } else {
+            cursor.y -= 4;
+        }
+
+        cursor.fillRect(MARGIN, cursor.y, cursor.pageWidth - 2 * MARGIN, 2f, ACCENT);
+        cursor.y -= 16;
+    }
+
     private void drawTitle(PageCursor cursor, PDFont regular, PDFont bold, ReportTable table) throws IOException {
-        cursor.text(bold, TITLE_FONT_SIZE, MARGIN, cursor.y, table.title());
+        cursor.text(bold, TITLE_FONT_SIZE, Color.BLACK, MARGIN, cursor.y, table.title());
         cursor.y -= TITLE_FONT_SIZE + 6;
-        cursor.text(regular, FONT_SIZE, MARGIN, cursor.y, "Période : " + table.startDate() + " au " + table.endDate());
+        cursor.text(regular, FONT_SIZE, GRAY, MARGIN, cursor.y, "Période : " + table.startDate() + " au " + table.endDate());
         cursor.y -= FONT_SIZE + 14;
     }
 
     private void drawHeaderRow(PageCursor cursor, PDFont bold, List<String> headers, float[] columnWidths, boolean[] rightAligned) throws IOException {
+        cursor.fillRect(MARGIN, cursor.y - ROW_HEIGHT + 5, sum(columnWidths), ROW_HEIGHT, ACCENT);
         float x = MARGIN;
         for (int col = 0; col < headers.size(); col++) {
-            drawCell(cursor, bold, headers.get(col), x, columnWidths[col], rightAligned[col]);
+            drawCell(cursor, bold, Color.WHITE, headers.get(col), x, columnWidths[col], rightAligned[col]);
             x += columnWidths[col];
         }
-        cursor.rule(MARGIN, MARGIN + sum(columnWidths), cursor.y - 3);
         cursor.y -= ROW_HEIGHT;
     }
 
-    private void drawDataRow(PageCursor cursor, PDFont font, List<Object> values, float[] columnWidths, boolean[] rightAligned) throws IOException {
+    private void drawDataRow(PageCursor cursor, PDFont font, boolean isTotalRow, List<Object> values, float[] columnWidths, boolean[] rightAligned) throws IOException {
+        if (isTotalRow) {
+            cursor.rule(RULE_GRAY, MARGIN, MARGIN + sum(columnWidths), cursor.y + 4);
+        }
         float x = MARGIN;
+        Color textColor = isTotalRow ? ACCENT : Color.BLACK;
         for (int col = 0; col < values.size(); col++) {
-            drawCell(cursor, font, formatCell(values.get(col)), x, columnWidths[col], rightAligned[col]);
+            drawCell(cursor, font, textColor, formatCell(values.get(col)), x, columnWidths[col], rightAligned[col]);
             x += columnWidths[col];
         }
         cursor.y -= ROW_HEIGHT;
     }
 
-    private void drawCell(PageCursor cursor, PDFont font, String value, float x, float width, boolean rightAlign) throws IOException {
+    private void drawCell(PageCursor cursor, PDFont font, Color color, String value, float x, float width, boolean rightAlign) throws IOException {
         String truncated = truncate(font, value, width - 6);
-        float textX = x + 2;
+        float textX = x + 4;
         if (rightAlign) {
             try {
                 float textWidth = font.getStringWidth(truncated) / 1000 * FONT_SIZE;
-                textX = x + width - textWidth - 4;
+                textX = x + width - textWidth - 6;
             } catch (IOException ignored) {
                 // fall back to left padding
             }
         }
-        cursor.text(font, FONT_SIZE, textX, cursor.y, truncated);
+        cursor.text(font, FONT_SIZE, color, textX, cursor.y, truncated);
+    }
+
+    private void drawFooters(PDDocument document, PDFont regular, float pageWidth, LocalDateTime generatedAt) throws IOException {
+        String generatedLabel = "Généré le " + generatedAt.format(DateTimeFormatter.ofPattern("dd/MM/yyyy à HH:mm"));
+        int total = document.getNumberOfPages();
+        for (int i = 0; i < total; i++) {
+            PDPage page = document.getPage(i);
+            try (PDPageContentStream stream = new PDPageContentStream(
+                    document, page, PDPageContentStream.AppendMode.APPEND, true, true)) {
+                stream.setStrokingColor(RULE_GRAY);
+                stream.setLineWidth(0.5f);
+                stream.moveTo(MARGIN, FOOTER_HEIGHT);
+                stream.lineTo(pageWidth - MARGIN, FOOTER_HEIGHT);
+                stream.stroke();
+
+                stream.setNonStrokingColor(GRAY);
+                stream.beginText();
+                stream.setFont(regular, FOOTER_FONT_SIZE);
+                stream.newLineAtOffset(MARGIN, FOOTER_HEIGHT - 12);
+                stream.showText(sanitize(generatedLabel));
+                stream.endText();
+
+                String pageLabel = "Page " + (i + 1) + " / " + total;
+                float labelWidth = regular.getStringWidth(pageLabel) / 1000 * FOOTER_FONT_SIZE;
+                stream.beginText();
+                stream.setFont(regular, FOOTER_FONT_SIZE);
+                stream.newLineAtOffset(pageWidth - MARGIN - labelWidth, FOOTER_HEIGHT - 12);
+                stream.showText(sanitize(pageLabel));
+                stream.endText();
+            }
+        }
     }
 
     private String truncate(PDFont font, String value, float maxWidth) throws IOException {
@@ -166,10 +253,19 @@ public class PdfReportWriter {
         return total;
     }
 
+    /** WinAnsi (PDFBox's Standard14 base encoding) can't encode every Unicode char — drop what it can't. */
+    private static String sanitize(String value) {
+        StringBuilder sb = new StringBuilder(value.length());
+        for (char c : value.toCharArray()) {
+            sb.append(c <= 0xFF ? c : '?');
+        }
+        return sb.toString();
+    }
+
     /** Owns the current page/content-stream and the running Y position, and opens a fresh page on demand. */
     private static final class PageCursor {
         private final PDDocument document;
-        private final float pageWidth;
+        final float pageWidth;
         private final float pageHeight;
         private PDPageContentStream stream;
         float y;
@@ -190,7 +286,8 @@ public class PdfReportWriter {
             y = pageHeight - MARGIN;
         }
 
-        void text(PDFont font, float size, float x, float yPos, String value) throws IOException {
+        void text(PDFont font, float size, Color color, float x, float yPos, String value) throws IOException {
+            stream.setNonStrokingColor(color);
             stream.beginText();
             stream.setFont(font, size);
             stream.newLineAtOffset(x, yPos);
@@ -198,26 +295,24 @@ public class PdfReportWriter {
             stream.endText();
         }
 
-        void rule(float x1, float x2, float yPos) throws IOException {
+        void rule(Color color, float x1, float x2, float yPos) throws IOException {
+            stream.setStrokingColor(color);
             stream.setLineWidth(0.5f);
             stream.moveTo(x1, yPos);
             stream.lineTo(x2, yPos);
             stream.stroke();
         }
 
+        void fillRect(float x, float y, float width, float height, Color color) throws IOException {
+            stream.setNonStrokingColor(color);
+            stream.addRect(x, y, width, height);
+            stream.fill();
+        }
+
         void close() throws IOException {
             if (stream != null) {
                 stream.close();
             }
-        }
-
-        /** WinAnsi (PDFBox's Standard14 base encoding) can't encode every Unicode char — drop what it can't. */
-        private String sanitize(String value) {
-            StringBuilder sb = new StringBuilder(value.length());
-            for (char c : value.toCharArray()) {
-                sb.append(c <= 0xFF ? c : '?');
-            }
-            return sb.toString();
         }
     }
 }

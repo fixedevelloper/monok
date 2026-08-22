@@ -59,7 +59,24 @@ public class AccountingController {
             @AuthenticationPrincipal CurrentUser principal) {
         Long effectiveBranchId = principal.branchId() != null ? principal.branchId() : branchId;
         ReportTable table = accountingService.build(report, startDate, endDate, effectiveBranchId);
+        return render(table, format, report + "_" + startDate + "_au_" + endDate);
+    }
 
+    /** One cash-register shift's orders — {@code sessionId} alone identifies the branch (via its
+     * register), so unlike {@link #export} there's no separate client-supplied {@code branchId}
+     * to override: a branch-scoped manager can only ever reach their own branch's sessions
+     * (enforced in {@code AccountingService#buildForSession}), an unscoped owner reaches any. */
+    @GetMapping("/shift/{sessionId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('view_reports'))")
+    public ResponseEntity<byte[]> exportShift(
+            @PathVariable Long sessionId,
+            @RequestParam String format,
+            @AuthenticationPrincipal CurrentUser principal) {
+        ReportTable table = accountingService.buildForSession(sessionId, principal.branchId());
+        return render(table, format, "shift_" + sessionId);
+    }
+
+    private ResponseEntity<byte[]> render(ReportTable table, String format, String filenameBase) {
         byte[] body;
         MediaType contentType;
         String extension;
@@ -75,7 +92,7 @@ public class AccountingController {
             throw ApiException.badRequest("Format d'export inconnu : " + format);
         }
 
-        String filename = report + "_" + startDate + "_au_" + endDate + "." + extension;
+        String filename = filenameBase + "." + extension;
         return ResponseEntity.ok()
                 .contentType(contentType)
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
