@@ -6,6 +6,7 @@ import com.monokek.kitchen.domain.KitchenTicket;
 import com.monokek.kitchen.domain.KitchenTicketRepository;
 import com.monokek.ordering.domain.event.KitchenTicketRequestedEvent;
 import com.monokek.ordering.domain.event.OrderStatusChangedEvent;
+import com.monokek.ordering.domain.event.RoundVoidedEvent;
 import org.springframework.modulith.events.ApplicationModuleListener;
 import org.springframework.stereotype.Component;
 
@@ -51,6 +52,15 @@ public class KitchenTicketListener {
         }
         for (KitchenTicket ticket : kitchenTicketRepository.findByOrderId(event.orderId())) {
             ticket.setStatus("served");
+            kitchenTicketRepository.save(ticket);
+        }
+    }
+
+    /** A voided round's ticket(s), if any were already raised, stop showing on the kitchen/bar screens — see {@code OrderService#voidRound}. */
+    @ApplicationModuleListener
+    void on(RoundVoidedEvent event) {
+        for (KitchenTicket ticket : kitchenTicketRepository.findByOrderRoundId(event.roundId())) {
+            ticket.setStatus("cancelled");
             kitchenTicketRepository.save(ticket);
         }
     }

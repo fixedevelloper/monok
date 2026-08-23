@@ -28,7 +28,7 @@ public class OrderRound extends Timestamps {
     @Column(name = "round_number")
     private int roundNumber = 1;
 
-    /** pending, sent, preparing, served */
+    /** pending, sent, preparing, served, voided */
     private String status = "pending";
 
     @Column(columnDefinition = "TEXT")
@@ -36,6 +36,16 @@ public class OrderRound extends Timestamps {
 
     @Column(name = "sent_at")
     private LocalDateTime sentAt;
+
+    /** Manager who approved the void via PIN (see identity.ManagerAuthClient) — null unless status is "voided". */
+    @Column(name = "voided_by_user_id")
+    private Long voidedByUserId;
+
+    @Column(name = "void_reason", columnDefinition = "TEXT")
+    private String voidReason;
+
+    @Column(name = "voided_at")
+    private LocalDateTime voidedAt;
 
     @OneToMany(mappedBy = "orderRound", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<OrderItem> items = new ArrayList<>();
@@ -82,5 +92,26 @@ public class OrderRound extends Timestamps {
     /** Applied by {@code Order#applyKitchenRoundStatus} in reaction to kitchen ticket updates. */
     void markKitchenStatus(String status) {
         this.status = status;
+    }
+
+    /**
+     * Removes this round from the bill without physically deleting it — called by
+     * {@code OrderService#voidRound} only after a manager's PIN was verified. Refuses on an
+     * already-paid order (billing is reconciled — use a refund flow instead) and on a round
+     * that's already {@code served} or {@code voided}. Any kitchen ticket already created for
+     * this round is cancelled separately, in reaction to {@code RoundVoidedEvent} — voiding
+     * doesn't un-send an order that's already in the kitchen, it only stops it from being billed.
+     */
+    public void voidRound(Long approvingManagerUserId, String reason) {
+        if (order.isPaid()) {
+            throw ApiException.conflict("Impossible de supprimer un round : la commande est déjà payée.");
+        }
+        if ("served".equals(status) || "voided".equals(status)) {
+            throw ApiException.conflict("Ce round ne peut plus être supprimé (déjà servi ou déjà supprimé).");
+        }
+        this.status = "voided";
+        this.voidedByUserId = approvingManagerUserId;
+        this.voidReason = reason;
+        this.voidedAt = LocalDateTime.now();
     }
 }

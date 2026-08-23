@@ -4,11 +4,13 @@ import com.monokek.cashier.CashierFacade;
 import com.monokek.catalog.ProductCatalog;
 import com.monokek.common.ApiException;
 import com.monokek.floorplan.TableDirectory;
+import com.monokek.identity.ManagerAuthClient;
 import com.monokek.identity.UserDirectory;
 import com.monokek.pms.PmsClient;
 import com.monokek.ordering.domain.*;
 import com.monokek.ordering.domain.event.KitchenTicketRequestedEvent;
 import com.monokek.ordering.domain.event.OrderPaidEvent;
+import com.monokek.ordering.domain.event.RoundVoidedEvent;
 import com.monokek.ordering.web.dto.*;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
@@ -59,6 +61,7 @@ public class OrderService {
     private final CommissionService commissionService;
     private final ApplicationEventPublisher events;
     private final PmsClient pmsClient;
+    private final ManagerAuthClient managerAuthClient;
 
     public OrderService(
             OrderRepository orderRepository,
@@ -69,7 +72,8 @@ public class OrderService {
             UserDirectory userDirectory,
             CommissionService commissionService,
             ApplicationEventPublisher events,
-            PmsClient pmsClient) {
+            PmsClient pmsClient,
+            ManagerAuthClient managerAuthClient) {
         this.orderRepository = orderRepository;
         this.orderRoundRepository = orderRoundRepository;
         this.productCatalog = productCatalog;
@@ -79,6 +83,7 @@ public class OrderService {
         this.commissionService = commissionService;
         this.events = events;
         this.pmsClient = pmsClient;
+        this.managerAuthClient = managerAuthClient;
     }
 
     @Transactional
@@ -127,6 +132,19 @@ public class OrderService {
         round = orderRoundRepository.save(round);
         final Long orderId = order.getId();
         final Long roundId = round.getId();
+
+        if (itemsByStation.isEmpty()) {
+            // Every item of this round was skipped (no kitchen station on its category) — no
+            // ticket will ever be created for it, so nothing will ever call back through
+            // KitchenTicketService#updateTicketStatus to move it off "sent". Without this, the
+            // round (and, if it's the order's last unserved one, the order itself) stayed stuck
+            // forever: Order#applyKitchenRoundStatus only fires in reaction to a ticket update,
+            // and the POS only shows the "Encaisser" button once the order reaches "completed" —
+            // an order like this could never be billed. There's nothing to prepare, so it's
+            // "served" the moment it's sent, same as a round whose last real ticket just finished.
+            order.applyKitchenRoundStatus(roundId, "served", waiterUserId);
+            order = orderRepository.save(order);
+        }
 
         if (!table.virtual()) {
             tableDirectory.markOccupied(table.id());
@@ -225,19 +243,64 @@ public class OrderService {
     /**
      * Voids an order that was never paid — the guest left without settling, or the till simply
      * needs it off the board. Frees the table (same rule as {@link #finalizePayment}: skip virtual
-     * takeaway tables) so it doesn't stay falsely "occupied" forever. Gated by the {@code
-     * cancel_orders} permission at the controller — this method itself only enforces that the
-     * order is actually cancellable ({@link Order#cancel}: not paid, not already cancelled).
+     * takeaway tables) so it doesn't stay falsely "occupied" forever.
+     *
+     * <p>Always requires a manager PIN, verified against {@code identity}'s own PIN lookup — an
+     * unsupervised void is a classic POS fraud vector (ring up cash, pocket it, void the order), so
+     * unlike most {@code /api/pos/**} actions this isn't gated by the caller's own session role: a
+     * cashier calls a manager over to type their PIN, and that manager becomes the accountable
+     * party recorded on the order's status history — {@code cancelledByUserId} (the cashier who
+     * initiated it) is folded into the reason text instead, since the history row only has room
+     * for one user id.
      */
     @Transactional
-    public void cancelOrder(UUID orderUuid, String reason, Long cancelledByUserId) {
+    public void cancelOrder(UUID orderUuid, String reason, String managerPin, Long cancelledByUserId, Long branchId, String bearerToken) {
+        ManagerAuthClient.ManagerApproval approver = managerAuthClient.verifyManagerPin(branchId, managerPin, bearerToken);
         Order order = orderRepository.findByUuid(orderUuid).orElseThrow(() -> ApiException.notFound("Commande introuvable."));
-        order.cancel(cancelledByUserId, reason);
+        order.cancel(approver.userId(), annotateReason(reason, approver, cancelledByUserId));
         orderRepository.save(order);
 
         if (order.getTableId() != null && !isVirtualTable(order.getTableId())) {
             tableDirectory.markFree(order.getTableId());
         }
+    }
+
+    /**
+     * Removes one round from a still-open order without physically deleting it — same manager-PIN
+     * override as {@link #cancelOrder}, at round granularity instead of the whole order (e.g. a
+     * guest changes their mind about one round but the rest of the bill stands). Recomputes totals,
+     * cancels any kitchen ticket already raised for the round (via {@link RoundVoidedEvent}, so
+     * {@code kitchen} reacts instead of this method reaching into its repository directly), and lets
+     * the order complete immediately if that was the only thing left unresolved — exactly the case
+     * that used to leave an order stuck unbillable forever (see {@link #sendRound}'s own
+     * {@code itemsByStation.isEmpty()} handling for the sibling case).
+     */
+    @Transactional
+    public OrderDto voidRound(Long roundId, String reason, String managerPin, Long cashierUserId, Long branchId, String bearerToken) {
+        ManagerAuthClient.ManagerApproval approver = managerAuthClient.verifyManagerPin(branchId, managerPin, bearerToken);
+        OrderRound round = orderRoundRepository.findById(roundId).orElseThrow(() -> ApiException.notFound("Round introuvable."));
+        Order order = round.getOrder();
+
+        String fullReason = annotateReason(reason, approver, cashierUserId);
+        round.voidRound(approver.userId(), fullReason);
+        orderRoundRepository.save(round);
+
+        order.refreshTotals();
+        order.completeIfAllRoundsResolved(approver.userId());
+        order = orderRepository.save(order);
+
+        events.publishEvent(new RoundVoidedEvent(
+                order.getId(), order.getUuid(), order.getReference(), order.getBranchId(),
+                round.getId(), round.getRoundNumber(), fullReason, cashierUserId, approver.userId()));
+
+        return toDto(order);
+    }
+
+    /** Folds the initiating cashier's name into a manager-approved override's reason — the history/event only has room for one accountable user id (the approver). */
+    private String annotateReason(String reason, ManagerAuthClient.ManagerApproval approver, Long initiatingUserId) {
+        String initiatorName = userNameOrNull(initiatingUserId);
+        return "%s (validé par %s, initié par %s)".formatted(
+                reason, approver.name(), initiatorName == null ? ("#" + initiatingUserId) : initiatorName);
     }
 
     /** Confirms the room is occupied, then bills this order's total to that stay's folio in pms-modulith. */
@@ -288,6 +351,7 @@ public class OrderService {
     private OrderPaidEvent toOrderPaidEvent(
             Order order, String paymentMethod, BigDecimal amountReceived, BigDecimal changeDue, String cashierName) {
         List<OrderPaidEvent.RoundItems> rounds = order.getRounds().stream()
+                .filter(round -> !"voided".equals(round.getStatus())) // voided off the bill — don't print it on the receipt
                 .sorted(Comparator.comparingInt(OrderRound::getRoundNumber))
                 .map(round -> new OrderPaidEvent.RoundItems(
                         round.getRoundNumber(), round.getItems().stream().map(this::toTicketItem).toList()))
@@ -514,7 +578,8 @@ public class OrderService {
                 round.getNote(),
                 round.getSentAt() == null ? null : round.getSentAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")),
                 items,
-                round.totalRound()
+                round.totalRound(),
+                round.getVoidReason()
         );
     }
 

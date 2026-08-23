@@ -30,7 +30,8 @@ public record OrderDto(
     }
 
     public record RoundDto(
-            Long id, int roundNumber, String status, String note, String sentAt, List<ItemDto> items, BigDecimal totalRound) {
+            Long id, int roundNumber, String status, String note, String sentAt, List<ItemDto> items, BigDecimal totalRound,
+            String voidReason) {
     }
 
     public record ItemDto(

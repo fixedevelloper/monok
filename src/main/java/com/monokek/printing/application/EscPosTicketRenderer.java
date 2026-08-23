@@ -282,12 +282,13 @@ public class EscPosTicketRenderer {
         return new Style().setJustification(EscPosConst.Justification.Center).setBold(true).setFontSize(Style.FontSize._2, Style.FontSize._2);
     }
 
+    /** Bold (not just normal()'s plain weight): emphasized mode lays down more ink, which reads noticeably darker on a thermal head than plain-weight text — same reasoning as renderTicket.ts's darkText() on the USB side. */
     private Style centered() {
-        return new Style().setJustification(EscPosConst.Justification.Center);
+        return new Style().setJustification(EscPosConst.Justification.Center).setBold(true);
     }
 
     private Style normal() {
-        return new Style().setJustification(EscPosConst.Justification.Left_Default);
+        return new Style().setJustification(EscPosConst.Justification.Left_Default).setBold(true);
     }
 
     private Style leftBold() {

@@ -151,8 +151,9 @@ public class Order extends Timestamps {
         this.total = newSubtotal.add(tax).subtract(discount);
     }
 
+    /** Excludes voided rounds — a voided round's items are removed from the bill, not just hidden. */
     public List<OrderItem> allItems() {
-        return rounds.stream().flatMap(r -> r.getItems().stream()).toList();
+        return rounds.stream().filter(r -> !"voided".equals(r.getStatus())).flatMap(r -> r.getItems().stream()).toList();
     }
 
     /** Transitions status, appends an {@link OrderStatusHistory} entry and stages an {@link OrderStatusChangedEvent}. */
@@ -170,7 +171,7 @@ public class Order extends Timestamps {
         history.setUserId(changedByUserId);
         history.setReason(reason);
         statusHistories.add(history);
-        pendingEvents.add(new UnresolvedEvent(EventKind.STATUS_CHANGED, new Object[]{previous, newStatus, changedByUserId}));
+        pendingEvents.add(new UnresolvedEvent(EventKind.STATUS_CHANGED, new Object[]{previous, newStatus, changedByUserId, reason}));
     }
 
     public void markPaid(Long cashierUserId) {
@@ -228,11 +229,24 @@ public class Order extends Timestamps {
             return;
         }
         round.markKitchenStatus(newRoundStatus);
+        completeIfAllRoundsResolved(systemUserId);
+    }
 
-        boolean allRoundsServed = !rounds.isEmpty() && rounds.stream().allMatch(r -> "served".equals(r.getStatus()));
-        if (allRoundsServed && !"completed".equals(status)) {
+    /**
+     * Same "every round done" cascade {@link #applyKitchenRoundStatus} runs, exposed for callers
+     * that change a round's status through a different path — {@code OrderService#voidRound}
+     * voids a round directly (there's no kitchen ticket to update if nothing was ever sent),
+     * which needs this same completion check without going through a kitchen ticket status update.
+     */
+    public void completeIfAllRoundsResolved(Long systemUserId) {
+        if (allRoundsResolved() && !"completed".equals(status) && !isPaid()) {
             changeStatus("completed", systemUserId);
         }
+    }
+
+    /** A round counts as resolved once nothing more will ever happen to it: served, or voided off the bill entirely. */
+    private boolean allRoundsResolved() {
+        return !rounds.isEmpty() && rounds.stream().allMatch(r -> "served".equals(r.getStatus()) || "voided".equals(r.getStatus()));
     }
 
     @DomainEvents
@@ -253,7 +267,8 @@ public class Order extends Timestamps {
                 List<OrderStatusChangedEvent.SoldItem> soldItems = allItems().stream()
                         .map(item -> new OrderStatusChangedEvent.SoldItem(item.getProductId(), item.getQty()))
                         .toList();
-                yield new OrderStatusChangedEvent(id, uuid, branchId, (String) payload[0], (String) payload[1], (Long) payload[2], soldItems);
+                yield new OrderStatusChangedEvent(
+                        id, uuid, branchId, (String) payload[0], (String) payload[1], (Long) payload[2], (String) payload[3], soldItems);
             }
         };
     }

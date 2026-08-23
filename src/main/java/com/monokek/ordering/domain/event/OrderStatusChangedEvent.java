@@ -17,11 +17,12 @@ import java.util.UUID;
  */
 public record OrderStatusChangedEvent(
         Long orderId, UUID orderUuid, Long branchId, String previousStatus, String newStatus, Long changedByUserId,
-        List<SoldItem> items, Instant occurredAt) {
+        String reason, List<SoldItem> items, Instant occurredAt) {
 
     public OrderStatusChangedEvent(
-            Long orderId, UUID orderUuid, Long branchId, String previousStatus, String newStatus, Long changedByUserId, List<SoldItem> items) {
-        this(orderId, orderUuid, branchId, previousStatus, newStatus, changedByUserId, items, Instant.now());
+            Long orderId, UUID orderUuid, Long branchId, String previousStatus, String newStatus, Long changedByUserId,
+            String reason, List<SoldItem> items) {
+        this(orderId, orderUuid, branchId, previousStatus, newStatus, changedByUserId, reason, items, Instant.now());
     }
 
     public record SoldItem(Long productId, int qty) {

@@ -9,6 +9,7 @@ import com.monokek.identity.domain.event.StaffPermissionsUpdatedEvent;
 import com.monokek.identity.domain.event.UserLoggedInEvent;
 import com.monokek.ordering.domain.event.OrderCreatedEvent;
 import com.monokek.ordering.domain.event.OrderStatusChangedEvent;
+import com.monokek.ordering.domain.event.RoundVoidedEvent;
 import com.monokek.settings.domain.ActivityLog;
 import com.monokek.settings.domain.ActivityLogRepository;
 import org.springframework.modulith.events.ApplicationModuleListener;
@@ -74,7 +75,16 @@ public class ActivityLogListener {
 
     @ApplicationModuleListener
     void on(OrderStatusChangedEvent event) {
-        record(event.changedByUserId(), "Commande #%d : %s -> %s".formatted(event.orderId(), event.previousStatus(), event.newStatus()));
+        // event.reason() is only ever set on a manual transition (cancel today) — automatic ones
+        // (markPaid, kitchen round completion) have nothing to say, so the suffix stays off.
+        String suffix = event.reason() == null || event.reason().isBlank() ? "" : " — motif : " + event.reason();
+        record(event.changedByUserId(), "Commande #%d : %s -> %s%s".formatted(event.orderId(), event.previousStatus(), event.newStatus(), suffix));
+    }
+
+    @ApplicationModuleListener
+    void on(RoundVoidedEvent event) {
+        record(event.approvedByManagerUserId(), "Commande %s : round #%d supprimé — %s".formatted(
+                event.orderReference(), event.roundNumber(), event.reason()));
     }
 
     @ApplicationModuleListener

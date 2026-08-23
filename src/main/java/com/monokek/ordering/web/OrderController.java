@@ -52,18 +52,29 @@ public class OrderController {
     }
 
     /**
-     * Voids an unpaid order — restricted to ADMIN/MANAGER (with {@code cancel_orders}) rather than
-     * every till role: an unsupervised void is a classic POS fraud vector (ring up cash, pocket it,
-     * void the order). No class-level {@code @PreAuthorize} exists on this controller (every other
-     * {@code /api/pos/**} action is open to any authenticated staff member running the till), so
-     * this is the only gate — deliberately, not an oversight.
+     * Voids an unpaid order. Open to any authenticated till user like every other
+     * {@code /api/pos/**} action — the actual gate is {@code request.managerPin()}, verified inside
+     * {@code OrderService#cancelOrder} against monokek-identity: an unsupervised void is a classic
+     * POS fraud vector (ring up cash, pocket it, void the order), so it's always a manager-approved
+     * override now rather than something a caller's own role alone can unlock.
      */
     @PostMapping("/api/pos/orders/{uuid}/cancel")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('cancel_orders'))")
     public ApiResponse<Void> cancelOrder(
-            @PathVariable UUID uuid, @Valid @RequestBody CancelOrderRequest request, @AuthenticationPrincipal CurrentUser principal) {
-        orderService.cancelOrder(uuid, request.reason(), principal.id());
+            @PathVariable UUID uuid, @Valid @RequestBody CancelOrderRequest request,
+            @AuthenticationPrincipal CurrentUser principal,
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String authorization) {
+        orderService.cancelOrder(uuid, request.reason(), request.managerPin(), principal.id(), principal.branchId(), authorization);
         return ApiResponse.message("Commande annulée");
+    }
+
+    /** Removes one round from a still-open order — same manager-PIN override as {@link #cancelOrder}, at round granularity. */
+    @PostMapping("/api/pos/rounds/{roundId}/void")
+    public ApiResponse<OrderDto> voidRound(
+            @PathVariable Long roundId, @Valid @RequestBody VoidRoundRequest request,
+            @AuthenticationPrincipal CurrentUser principal,
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String authorization) {
+        OrderDto order = orderService.voidRound(roundId, request.reason(), request.managerPin(), principal.id(), principal.branchId(), authorization);
+        return ApiResponse.success(order, "Round supprimé");
     }
 
     @GetMapping("/api/pos/orders")
