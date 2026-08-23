@@ -1,0 +1,38 @@
+# Profil "test" : H2 en mémoire au lieu de MySQL, schéma généré par Hibernate
+# (create-drop) plutôt que par Flyway — les migrations sous db/migration
+# contiennent de la syntaxe MySQL (bigint unsigned, colonnes générées, etc.)
+# non garantie compatible H2, et rejouer 20 migrations pour un test n'apporte
+# rien à ce qu'on veut vérifier ici (le comportement de OrderService/Order).
+spring:
+  datasource:
+    url: jdbc:h2:mem:monokek_test;DB_CLOSE_DELAY=-1;MODE=MySQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+
+  flyway:
+    enabled: false
+
+  modulith:
+    events:
+      jdbc:
+        # Flyway n'étant plus là pour créer EVENT_PUBLICATION (V5__add_event_publication.sql),
+        # on laisse Spring Modulith initialiser son propre schéma (dialecte H2 auto-détecté) —
+        # inverse du réglage de application.yml, qui compte justement sur Flyway en prod.
+        #
+        # Vraie clé (vérifiée dans spring-configuration-metadata.json de spring-modulith-events-jdbc) :
+        # spring.modulith.events.jdbc.schema-initialization.enabled — PAS "jdbc-schema-initialization"
+        # comme écrit dans application.yml (clé qui ne correspond à rien, sans effet en prod ; Flyway
+        # y crée la table de toute façon donc ça ne s'est jamais vu — à corriger séparément, hors sujet ici).
+        schema-initialization:
+          enabled: true
+
+app:
+  security:
+    # SecretsValidator refuse sinon de démarrer le contexte : valeurs par défaut
+    # de application.yml volontairement rejetées hors test.
+    allow-default-secrets: true

@@ -92,6 +92,7 @@ public class OrderService {
                 .orElseThrow(() -> ApiException.notFound("Table introuvable."));
 
         Order order = resolveOrderForSendRound(request, table, waiterUserId, cashierUserId);
+        boolean isNewOrder = order.getId() == null;
         OrderRound round = order.openRound(request.note());
 
         Map<Long, List<KitchenTicketRequestedEvent.TicketItem>> itemsByStation = new LinkedHashMap<>();
@@ -120,16 +121,29 @@ public class OrderService {
         }
 
         order.refreshTotals();
-        order = orderRepository.save(order);
-        // Explicit save, not just relying on order.rounds' cascade: when `order` was fetched via
-        // findById (every round after the first one on an already-open order), it's already
-        // managed, so orderRepository.save(order) above is a merge() no-op that never triggers an
-        // insert for the newly-added `round` — Hibernate would only flush it (and assign the
-        // IDENTITY-generated id) at transaction commit, which is too late for round.getId() below.
-        // Saving `round` directly forces that insert now. (A brand-new order doesn't have this
-        // problem — its save() is a real persist(), which cascades immediately — but this call is
-        // a harmless no-op in that case.)
-        round = orderRoundRepository.save(round);
+        // Exactly ONE explicit save, chosen by whether `order` was already managed coming in —
+        // calling both `orderRepository.save(order)` (merge) AND `orderRoundRepository.save(round)`
+        // used to insert the same round twice on every round after the first: contrary to the old
+        // assumption here, Hibernate's merge() on an already-managed order still cascades an insert
+        // for the newly-added `round` in `order.rounds` (CascadeType.ALL) — the explicit
+        // orderRoundRepository.save(round) right after was then a SECOND, genuinely distinct insert
+        // of the same round/items, not the harmless no-op it was assumed to be. Traced live: every
+        // round after the first, on orders #50/#51/#54, existed as two DB rows, the phantom one
+        // stuck forever on "sent" since nothing (no kitchen ticket) ever referenced it.
+        //
+        // - Brand-new order: `order` is transient, so persist()-ing it here is what's actually
+        //   needed; it cascades order+round+items in one go and assigns every IDENTITY id
+        //   synchronously (required for round.getId() right below).
+        // - Existing order: `order` is already managed in this transaction (loaded by
+        //   resolveOrderForSendRound) — saving IT is unnecessary (its own field changes, e.g.
+        //   refreshTotals() above, are picked up by ordinary dirty-checking at flush/commit with no
+        //   explicit call). Saving just the new `round` is enough to cascade-insert it (and its
+        //   items, via OrderRound#items' own CascadeType.ALL) without touching the order itself.
+        if (isNewOrder) {
+            order = orderRepository.save(order);
+        } else {
+            orderRoundRepository.save(round);
+        }
         final Long orderId = order.getId();
         final Long roundId = round.getId();
 
@@ -159,7 +173,11 @@ public class OrderService {
     private Order resolveOrderForSendRound(
             SendRoundRequest request, TableDirectory.TableSnapshot table, Long waiterUserId, Long cashierUserId) {
         if (request.orderId() != null) {
-            Order order = orderRepository.findById(request.orderId())
+            // Locked: two near-simultaneous sendRound calls carrying the same orderId (e.g. a
+            // table already past its first round) must not both read the same round count — see
+            // OrderRepository#findFirstByTableIdAndStatusNotInOrderByIdDesc's javadoc for the
+            // duplicate-round failure mode this closes.
+            Order order = orderRepository.findByIdForUpdate(request.orderId())
                     .orElseThrow(() -> ApiException.notFound("Commande introuvable."));
             order.assertOpen();
             if (!Objects.equals(order.getTableId(), table.id())) {

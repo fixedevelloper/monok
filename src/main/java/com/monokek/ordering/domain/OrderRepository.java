@@ -1,7 +1,9 @@
 package com.monokek.ordering.domain;
 
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.NoRepositoryBean;
 import org.springframework.data.repository.Repository;
@@ -19,6 +21,20 @@ public interface OrderRepository extends Repository<Order, Long> {
 
     Optional<Order> findById(Long id);
 
+    /** Same row as {@link #findById}, but under {@code SELECT ... FOR UPDATE} — used only by
+     * {@code OrderService#resolveOrderForSendRound}'s explicit-{@code orderId} branch, never for
+     * plain reads (payment, cancellation, history...), to avoid serializing those unnecessarily
+     * behind a lock they don't need. See {@link #findFirstByTableIdAndStatusNotInOrderByIdDesc}
+     * for why this lock exists at all.
+     *
+     * <p>Backed by an explicit {@code @Query} rather than derived from the method name: Spring
+     * Data's derivation parses {@code findByIdForUpdate} as a property path ("idForUpdate" on
+     * {@code Order}, which doesn't exist) — "ForUpdate" isn't one of its recognized keywords, it
+     * only means anything here because of the {@link Lock} annotation. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT o FROM Order o WHERE o.id = :id")
+    Optional<Order> findByIdForUpdate(@Param("id") Long id);
+
     Optional<Order> findByUuid(UUID uuid);
 
     Optional<Order> findByReference(String reference);
@@ -28,7 +44,17 @@ public interface OrderRepository extends Repository<Order, Long> {
     /** The order currently open on a table, if any — reused by {@code sendRound} instead of creating a duplicate.
      * Must exclude both terminal statuses ("paid" and "cancelled"): excluding only "paid" let a
      * cancelled order get silently picked back up as "the" open order for its table — see
-     * {@code Order#assertOpen}. */
+     * {@code Order#assertOpen}.
+     *
+     * <p>Locked ({@code SELECT ... FOR UPDATE}), restoring the pessimistic locking the class-level
+     * javadoc on {@code OrderService} used to call out as intentionally dropped versus the Laravel
+     * original: without it, two near-simultaneous {@code sendRound} calls for the same table each
+     * read the same round count, both call {@code Order#openRound} with the same computed
+     * {@code round_number}, and both commit — a real, observed duplicate (traced live on orders
+     * #51/#54: a whole round, items included, silently doubled). The lock is held for the
+     * remainder of {@code sendRound}'s transaction, so the second call blocks until the first
+     * commits its new round, then sees the up-to-date count.</p> */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<Order> findFirstByTableIdAndStatusNotInOrderByIdDesc(Long tableId, List<String> excludedStatuses);
 
     /** The order the POS shows as "active" for a table — port of {@code OrderController::getActiveOrder}. */
