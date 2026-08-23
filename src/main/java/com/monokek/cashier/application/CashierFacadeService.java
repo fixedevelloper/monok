@@ -73,6 +73,6 @@ class CashierFacadeService implements CashierFacade {
     public Optional<PaymentSnapshot> findLatestPaymentForOrder(Long orderId) {
         return paymentRepository.findByOrderId(orderId).stream()
                 .max(java.util.Comparator.comparing(Payment::getId))
-                .map(p -> new PaymentSnapshot(p.getPaymentMethod().getName(), p.getAmountReceived(), p.getChangeDue()));
+                .map(p -> new PaymentSnapshot(p.getPaymentMethod().getName(), p.getAmountReceived(), p.getChangeDue(), p.getCashSession().getUserId()));
     }
 }

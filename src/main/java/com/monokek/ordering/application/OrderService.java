@@ -219,7 +219,7 @@ public class OrderService {
             tableDirectory.markFree(order.getTableId());
         }
 
-        events.publishEvent(toOrderPaidEvent(order, request.paymentMethod(), request.amountReceived(), payment.changeDue()));
+        events.publishEvent(toOrderPaidEvent(order, request.paymentMethod(), request.amountReceived(), payment.changeDue(), userNameOrNull(cashierUserId)));
     }
 
     /**
@@ -280,11 +280,13 @@ public class OrderService {
         CashierFacade.PaymentSnapshot payment = cashierFacade.findLatestPaymentForOrder(order.getId())
                 .orElseThrow(() -> ApiException.notFound("Aucun paiement enregistré pour cette commande."));
 
-        events.publishEvent(toOrderPaidEvent(order, payment.methodName(), payment.amountReceived(), payment.changeDue()));
+        events.publishEvent(toOrderPaidEvent(
+                order, payment.methodName(), payment.amountReceived(), payment.changeDue(), userNameOrNull(payment.cashierUserId())));
     }
 
     /** Resolves everything {@code printing} needs to render a receipt — same names/tables resolution pattern as {@link #toDto}. */
-    private OrderPaidEvent toOrderPaidEvent(Order order, String paymentMethod, BigDecimal amountReceived, BigDecimal changeDue) {
+    private OrderPaidEvent toOrderPaidEvent(
+            Order order, String paymentMethod, BigDecimal amountReceived, BigDecimal changeDue, String cashierName) {
         List<OrderPaidEvent.RoundItems> rounds = order.getRounds().stream()
                 .sorted(Comparator.comparingInt(OrderRound::getRoundNumber))
                 .map(round -> new OrderPaidEvent.RoundItems(
@@ -293,7 +295,7 @@ public class OrderService {
 
         return new OrderPaidEvent(
                 order.getId(), order.getUuid(), order.getBranchId(), order.getReference(),
-                tableNameOrNull(order.getTableId()), userNameOrNull(order.getUserId()), rounds,
+                tableNameOrNull(order.getTableId()), userNameOrNull(order.getUserId()), cashierName, rounds,
                 order.getSubtotal(), order.getTax(), order.getDiscount(), order.getTotal(),
                 paymentMethod, amountReceived, changeDue);
     }

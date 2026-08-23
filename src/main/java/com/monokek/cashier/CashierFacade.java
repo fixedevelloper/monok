@@ -25,6 +25,6 @@ public interface CashierFacade {
     record PaymentResult(Long paymentId, BigDecimal changeDue) {
     }
 
-    record PaymentSnapshot(String methodName, BigDecimal amountReceived, BigDecimal changeDue) {
+    record PaymentSnapshot(String methodName, BigDecimal amountReceived, BigDecimal changeDue, Long cashierUserId) {
     }
 }

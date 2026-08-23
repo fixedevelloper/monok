@@ -27,6 +27,7 @@ public record OrderPaidEvent(
         String reference,
         String tableName,
         String serverName,
+        String cashierName,
         List<RoundItems> rounds,
         BigDecimal subtotal,
         BigDecimal tax,
@@ -38,10 +39,10 @@ public record OrderPaidEvent(
         Instant occurredAt) {
 
     public OrderPaidEvent(
-            Long orderId, UUID orderUuid, Long branchId, String reference, String tableName, String serverName, List<RoundItems> rounds,
-            BigDecimal subtotal, BigDecimal tax, BigDecimal discount, BigDecimal total,
+            Long orderId, UUID orderUuid, Long branchId, String reference, String tableName, String serverName, String cashierName,
+            List<RoundItems> rounds, BigDecimal subtotal, BigDecimal tax, BigDecimal discount, BigDecimal total,
             String paymentMethod, BigDecimal amountReceived, BigDecimal changeDue) {
-        this(orderId, orderUuid, branchId, reference, tableName, serverName, rounds, subtotal, tax, discount, total,
+        this(orderId, orderUuid, branchId, reference, tableName, serverName, cashierName, rounds, subtotal, tax, discount, total,
                 paymentMethod, amountReceived, changeDue, Instant.now());
     }
 

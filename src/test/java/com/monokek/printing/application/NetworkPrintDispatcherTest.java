@@ -47,7 +47,7 @@ class NetworkPrintDispatcherTest {
 
             Printer printer = networkPrinter(fakePrinter.getLocalPort());
             ReceiptContent content = new ReceiptContent(
-                    10L, "uuid-1", "CMD-0001", "Mono Kek", "Douala", "699000000", null, "Table 3", "Awa",
+                    10L, "uuid-1", "CMD-0001", "Mono Kek", "Douala", "699000000", null, "Table 3", "Awa", "Paul",
                     List.of(new ReceiptContent.RoundSection(1,
                             List.of(new ReceiptContent.TicketItem("Soya Boeuf", 2, new BigDecimal("1000"), new BigDecimal("2000"), List.of("Piment"))))),
                     new BigDecimal("2000"), BigDecimal.ZERO, BigDecimal.ZERO, new BigDecimal("2000"),
@@ -91,7 +91,7 @@ class NetworkPrintDispatcherTest {
 
             Printer printer = networkPrinter(fakePrinter.getLocalPort());
             ReceiptContent content = new ReceiptContent(
-                    11L, "uuid-2", "CMD-0002", "Mono Kek", null, null, "http://127.0.0.1:1/logo.png", "Table 1", null,
+                    11L, "uuid-2", "CMD-0002", "Mono Kek", null, null, "http://127.0.0.1:1/logo.png", "Table 1", null, null,
                     List.of(new ReceiptContent.RoundSection(1,
                             List.of(new ReceiptContent.TicketItem("Coca", 1, new BigDecimal("500"), new BigDecimal("500"), List.of())))),
                     new BigDecimal("500"), BigDecimal.ZERO, BigDecimal.ZERO, new BigDecimal("500"),

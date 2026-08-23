@@ -84,7 +84,7 @@ public class PrintQueueListener {
             ReceiptContent content = new ReceiptContent(
                     event.orderId(), event.orderUuid().toString(), event.reference(),
                     store.name(), store.address(), store.phone(), store.logoUrl(),
-                    event.tableName(), event.serverName(), rounds,
+                    event.tableName(), event.serverName(), event.cashierName(), rounds,
                     event.subtotal(), event.tax(), event.discount(), event.total(),
                     event.paymentMethod(), event.amountReceived(), event.changeDue());
             dispatch(printer, "receipt", content);

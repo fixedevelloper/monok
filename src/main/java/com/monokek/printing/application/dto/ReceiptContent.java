@@ -14,6 +14,7 @@ public record ReceiptContent(
         String storeLogoUrl,
         String tableName,
         String serverName,
+        String cashierName,
         List<RoundSection> rounds,
         BigDecimal subtotal,
         BigDecimal tax,

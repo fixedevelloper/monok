@@ -103,6 +103,7 @@ public class EscPosTicketRenderer {
         escpos.writeLF(normal(), "Table    : " + orNa(content.tableName()));
         escpos.writeLF(normal(), "Facture  : " + content.reference());
         escpos.writeLF(normal(), "Serveur  : " + orNa(content.serverName()));
+        escpos.writeLF(normal(), "Caissier : " + orNa(content.cashierName()));
         escpos.writeLF(rule(printer));
 
         for (ReceiptContent.RoundSection round : content.rounds()) {
@@ -160,6 +161,7 @@ public class EscPosTicketRenderer {
         if (content.storePhone() != null) {
             escpos.writeLF(centered(), "Tel : " + content.storePhone());
         }
+        escpos.writeLF(centered(), LocalDateTime.now().format(TIMESTAMP_FORMAT));
         escpos.writeLF(doubleRule(printer));
         escpos.writeLF(centered(), "BON DE REDUCTION");
         escpos.feed(1);
