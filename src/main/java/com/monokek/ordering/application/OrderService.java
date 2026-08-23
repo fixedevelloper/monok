@@ -161,7 +161,7 @@ public class OrderService {
         if (request.orderId() != null) {
             Order order = orderRepository.findById(request.orderId())
                     .orElseThrow(() -> ApiException.notFound("Commande introuvable."));
-            order.assertNotPaid();
+            order.assertOpen();
             if (!Objects.equals(order.getTableId(), table.id())) {
                 throw ApiException.conflict("Cette commande n'appartient pas à la table indiquée.");
             }
@@ -173,7 +173,10 @@ public class OrderService {
         if (table.virtual()) {
             return Order.openForTable(table.branchId(), table.id(), waiterUserId, cashierUserId);
         }
-        return orderRepository.findFirstByTableIdAndStatusNotOrderByIdDesc(table.id(), "paid")
+        // Excludes "cancelled" as well as "paid": a cancelled order used to still match here
+        // (only "paid" was excluded), so the next round sent to this table silently reattached
+        // to a dead order — see Order#assertOpen for the full failure mode.
+        return orderRepository.findFirstByTableIdAndStatusNotInOrderByIdDesc(table.id(), List.of("paid", "cancelled"))
                 .orElseGet(() -> Order.openForTable(table.branchId(), table.id(), waiterUserId, cashierUserId));
     }
 

@@ -25,8 +25,11 @@ public interface OrderRepository extends Repository<Order, Long> {
 
     List<Order> findByBranchIdAndStatus(Long branchId, String status);
 
-    /** The order currently open on a table, if any — reused by {@code sendRound} instead of creating a duplicate. */
-    Optional<Order> findFirstByTableIdAndStatusNotOrderByIdDesc(Long tableId, String excludedStatus);
+    /** The order currently open on a table, if any — reused by {@code sendRound} instead of creating a duplicate.
+     * Must exclude both terminal statuses ("paid" and "cancelled"): excluding only "paid" let a
+     * cancelled order get silently picked back up as "the" open order for its table — see
+     * {@code Order#assertOpen}. */
+    Optional<Order> findFirstByTableIdAndStatusNotInOrderByIdDesc(Long tableId, List<String> excludedStatuses);
 
     /** The order the POS shows as "active" for a table — port of {@code OrderController::getActiveOrder}. */
     Optional<Order> findFirstByTableIdAndStatusInOrderByIdDesc(Long tableId, List<String> statuses);

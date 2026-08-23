@@ -136,8 +136,23 @@ public class Order extends Timestamps {
         return order;
     }
 
-    /** Opens the next round (round_number auto-incremented) and attaches it to this order. */
+    /**
+     * Opens the next round (round_number auto-incremented) and attaches it to this order.
+     *
+     * <p>Reopens the order first if it had already reached {@code completed}: that status is set
+     * by {@link #completeIfAllRoundsResolved} once every existing round is served/voided, but nothing
+     * previously undid it when a further round was added afterwards (a guest orders another drink
+     * before the bill). Left alone, the order stayed "completed" — billable in the POS — for the
+     * entire time this new round was still being prepared, and once THAT round finished,
+     * {@code completeIfAllRoundsResolved}'s own {@code !"completed".equals(status)} guard silently
+     * swallowed the follow-up transition (no new {@link OrderStatusChangedEvent}, so
+     * {@code KitchenTicketListener}/{@code ActivityLogListener}/{@code NotificationEventListener}
+     * never reacted to it either).
+     */
     public OrderRound openRound(String note) {
+        if ("completed".equals(status)) {
+            changeStatus("pending", null);
+        }
         int nextNumber = rounds.size() + 1;
         OrderRound round = OrderRound.open(this, nextNumber, note);
         rounds.add(round);
@@ -278,9 +293,25 @@ public class Order extends Timestamps {
     private record UnresolvedEvent(EventKind kind, Object payload) {
     }
 
-    public void assertNotPaid() {
+    /**
+     * Guards every write that appends to an order (new round, round edit, resuming an order
+     * an explicit {@code orderId} points at). Checks both terminal states, not just paid: a
+     * cancelled order used to only be excluded from the table's "current open order" lookup by
+     * its status matching "paid" ({@code findFirstByTableIdAndStatusNotInOrderByIdDesc} used to
+     * take a single excluded status), so a cancelled-but-not-paid order on a real (non-virtual)
+     * table was silently picked back up as "the" order the next time a round was sent to that
+     * table — new rounds/items landed on it, it re-occupied the table via
+     * {@code tableDirectory.markOccupied}, kitchen tickets fired normally (independent of the
+     * order's status), but the order itself stayed permanently invisible in the POS ("Ventes")
+     * history: {@code OrderService#history}'s active-orders query explicitly excludes
+     * "cancelled". The table looked stuck "occupied" with an order nobody could ever see or bill.
+     */
+    public void assertOpen() {
         if (isPaid()) {
             throw ApiException.conflict("Impossible d'ajouter un round : la commande est déjà payée.");
+        }
+        if (isCancelled()) {
+            throw ApiException.conflict("Impossible d'ajouter un round : la commande est annulée.");
         }
     }
 }
