@@ -10,6 +10,8 @@ public record AnalyticsResponse(
         long ordersCount,
         BigDecimal averageCart,
         BigDecimal foodCostPercent,
+        BigDecimal grossMargin,
+        BigDecimal grossMarginPercent,
         List<HourlyFlow> hourlyFlow,
         List<WaiterPerformance> waiterPerformance,
         List<PaymentMethodTotal> paymentsByMethod,

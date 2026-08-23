@@ -8,6 +8,7 @@ public record UpdateProductRequest(
         String name,
         String sku,
         BigDecimal price,
+        BigDecimal purchasePrice,
         BigDecimal incentiveAmount,
         Integer stockCount,
         Integer alertStock,

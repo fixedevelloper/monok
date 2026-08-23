@@ -72,6 +72,7 @@ public class ProductService {
         product.setName(request.name());
         product.setSku(request.sku());
         product.setPrice(request.price());
+        product.setPurchasePrice(request.purchasePrice());
         product.setIncentiveAmount(request.incentiveAmount() == null ? BigDecimal.ZERO : request.incentiveAmount());
         product.setStockCount(request.stockCount() == null ? 0 : request.stockCount());
         product.setAlertStock(request.alertStock() == null ? 0 : request.alertStock());
@@ -100,6 +101,7 @@ public class ProductService {
             product.setSku(request.sku());
         }
         if (request.price() != null) product.setPrice(request.price());
+        if (request.purchasePrice() != null) product.setPurchasePrice(request.purchasePrice());
         if (request.incentiveAmount() != null) product.setIncentiveAmount(request.incentiveAmount());
         if (request.stockCount() != null) product.setStockCount(request.stockCount());
         if (request.alertStock() != null) product.setAlertStock(request.alertStock());
@@ -201,7 +203,8 @@ public class ProductService {
         return new ProductDto(
                 product.getId(), product.getCategory().getId(), product.getCategory().getName(),
                 product.getCategory().getBranchId(), product.getSku(),
-                product.getName(), product.getDescription(), product.getPrice(), product.getIncentiveAmount(),
+                product.getName(), product.getDescription(), product.getPrice(), product.getPurchasePrice(),
+                product.getIncentiveAmount(),
                 formatFcfa(product.getPrice()), product.isActive(), product.isTrackStock(), product.getStockCount(),
                 product.getAlertStock(), product.getType(), product.getImage(), modifiers
         );

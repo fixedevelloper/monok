@@ -17,6 +17,7 @@ public record CreateProductRequest(
         @NotBlank String name,
         String sku,
         @NotNull @DecimalMin("0") BigDecimal price,
+        @PositiveOrZero BigDecimal purchasePrice,
         @PositiveOrZero BigDecimal incentiveAmount,
         @PositiveOrZero Integer stockCount,
         @PositiveOrZero Integer alertStock,

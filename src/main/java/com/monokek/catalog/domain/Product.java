@@ -35,6 +35,13 @@ public class Product extends Timestamps {
     @Column(precision = 12, scale = 2)
     private BigDecimal price;
 
+    /** Cost the branch pays to acquire/produce one unit — used as a fallback cost source in
+     * {@code reporting.ReportingService#foodCostPercent} for products with no recipe (see there
+     * for why that used to leave them out of the food-cost calculation entirely). Nullable: no
+     * value means no cost data, same as before this field existed. */
+    @Column(name = "purchase_price", precision = 12, scale = 2)
+    private BigDecimal purchasePrice;
+
     @Column(name = "incentive_amount", precision = 10, scale = 2)
     private BigDecimal incentiveAmount = BigDecimal.ZERO;
 

@@ -9,6 +9,9 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashSet;
 import java.util.Map;
@@ -33,9 +36,13 @@ public class ActivityLogService {
         this.userDirectory = userDirectory;
     }
 
+    /** {@code startDate}/{@code endDate} optional — same conversion as {@code
+     * OrderService#historyAdmin}: whole-day bounds, {@code null} left unbounded on that side. */
     @Transactional(readOnly = true)
-    public Page<ActivityLogDto> list(Pageable pageable) {
-        Page<ActivityLog> page = activityLogRepository.findAllByOrderByCreatedAtDesc(pageable);
+    public Page<ActivityLogDto> list(LocalDate startDate, LocalDate endDate, Pageable pageable) {
+        LocalDateTime from = startDate == null ? null : startDate.atStartOfDay();
+        LocalDateTime to = endDate == null ? null : endDate.atTime(LocalTime.MAX);
+        Page<ActivityLog> page = activityLogRepository.search(from, to, pageable);
 
         Set<Long> userIds = new LinkedHashSet<>();
         page.forEach(log -> {

@@ -8,7 +8,10 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.time.LocalDate;
 
 /** Admin-facing audit trail — see {@code ActivityLogService} for why this didn't exist until now. */
 @RestController
@@ -23,7 +26,10 @@ public class ActivityLogController {
     }
 
     @GetMapping
-    public Page<ActivityLogDto> index(@PageableDefault(size = 50) Pageable pageable) {
-        return activityLogService.list(pageable);
+    public Page<ActivityLogDto> index(
+            @RequestParam(required = false) LocalDate startDate,
+            @RequestParam(required = false) LocalDate endDate,
+            @PageableDefault(size = 50) Pageable pageable) {
+        return activityLogService.list(startDate, endDate, pageable);
     }
 }

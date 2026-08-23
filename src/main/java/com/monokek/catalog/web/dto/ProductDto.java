@@ -13,6 +13,7 @@ public record ProductDto(
         String name,
         String description,
         BigDecimal price,
+        BigDecimal purchasePrice,
         BigDecimal incentiveAmount,
         String formattedPrice,
         boolean active,

@@ -205,23 +205,31 @@ public class ReportingService {
                 """, params,
                 (rs, rowNum) -> new AnalyticsResponse.TopProduct(rs.getString("product"), rs.getLong("qty"), rs.getBigDecimal("revenue")));
 
-        BigDecimal foodCostPercent = foodCostPercent(params, totalSales);
+        BigDecimal cogs = costOfGoodsSold(params);
+        BigDecimal foodCostPercent = percentOf(cogs, totalSales);
+        BigDecimal grossMargin = totalSales == null ? BigDecimal.ZERO : totalSales.subtract(cogs);
+        BigDecimal grossMarginPercent = percentOf(grossMargin, totalSales);
 
         return new AnalyticsResponse(start.toString(), end.toString(), totalSales, ordersCount, averageCart,
-                foodCostPercent, hourlyFlow, waiterPerformance, paymentsByMethod, salesOverTime, topProducts);
+                foodCostPercent, grossMargin, grossMarginPercent,
+                hourlyFlow, waiterPerformance, paymentsByMethod, salesOverTime, topProducts);
     }
 
     /**
-     * Cost of goods sold, as a percentage of {@code totalSales}, for the same
-     * {@code :start}/{@code :end} window as the rest of {@link #getAnalytics}.
-     * No table stores a current unit cost per ingredient, so each ingredient's
-     * cost is approximated by its most recent {@code purchase_order_items.price}
-     * (the only place a monetary ingredient cost is ever recorded). Products
-     * without a recipe contribute zero cost, since there is no cost data for
-     * them either.
+     * Cost of goods sold for the same {@code :start}/{@code :end} window as the rest of
+     * {@link #getAnalytics}. Two cost sources, recipe preferred when both exist for a product:
+     * <ul>
+     *   <li>recipe-based: no table stores a current unit cost per ingredient, so each ingredient's
+     *   cost is approximated by its most recent {@code purchase_order_items.price} (the only place
+     *   a monetary ingredient cost is ever recorded);</li>
+     *   <li>{@code products.purchase_price} otherwise — added specifically so products sold as-is
+     *   (no recipe: bottled drinks, etc.) stop contributing zero cost, which is what this query did
+     *   before that column existed.</li>
+     * </ul>
+     * A product with neither still contributes zero — there is no cost data for it at all.
      */
-    private BigDecimal foodCostPercent(MapSqlParameterSource params, BigDecimal totalSales) {
-        BigDecimal cogs = jdbc.queryForObject(
+    private BigDecimal costOfGoodsSold(MapSqlParameterSource params) {
+        return jdbc.queryForObject(
                 """
                 WITH latest_ingredient_price AS (
                     SELECT ingredient_id, price FROM (
@@ -241,19 +249,22 @@ public class ReportingService {
                     LEFT JOIN latest_ingredient_price lip ON lip.ingredient_id = ri.ingredient_id
                     GROUP BY r.product_id
                 )
-                SELECT COALESCE(SUM(oi.qty * rc.unit_cost), 0)
+                SELECT COALESCE(SUM(oi.qty * COALESCE(rc.unit_cost, p.purchase_price, 0)), 0)
                 FROM order_items oi
                 JOIN order_rounds orr ON oi.order_round_id = orr.id
                 JOIN orders o ON orr.order_id = o.id
-                JOIN recipe_cost rc ON rc.product_id = oi.product_id
+                JOIN products p ON p.id = oi.product_id
+                LEFT JOIN recipe_cost rc ON rc.product_id = oi.product_id
                 WHERE o.status = 'paid' AND o.created_at >= :start AND o.created_at < :end
                   AND (:branchId IS NULL OR o.branch_id = :branchId)
                 """, params, BigDecimal.class);
+    }
 
+    private BigDecimal percentOf(BigDecimal amount, BigDecimal totalSales) {
         if (totalSales == null || totalSales.compareTo(BigDecimal.ZERO) <= 0) {
             return BigDecimal.ZERO;
         }
-        return cogs.multiply(BigDecimal.valueOf(100)).divide(totalSales, 1, RoundingMode.HALF_UP);
+        return amount.multiply(BigDecimal.valueOf(100)).divide(totalSales, 1, RoundingMode.HALF_UP);
     }
 
     private MapSqlParameterSource dayRange(LocalDate day) {
