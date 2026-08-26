@@ -4,6 +4,7 @@ import com.monokek.cashier.CashierFacade;
 import com.monokek.catalog.ProductCatalog;
 import com.monokek.common.ApiException;
 import com.monokek.crm.CouponCatalog;
+import com.monokek.crm.CustomerDirectory;
 import com.monokek.floorplan.TableDirectory;
 import com.monokek.identity.ManagerAuthClient;
 import com.monokek.identity.UserDirectory;
@@ -64,6 +65,7 @@ public class OrderService {
     private final PmsClient pmsClient;
     private final ManagerAuthClient managerAuthClient;
     private final CouponCatalog couponCatalog;
+    private final CustomerDirectory customerDirectory;
 
     public OrderService(
             OrderRepository orderRepository,
@@ -76,7 +78,8 @@ public class OrderService {
             ApplicationEventPublisher events,
             PmsClient pmsClient,
             ManagerAuthClient managerAuthClient,
-            CouponCatalog couponCatalog) {
+            CouponCatalog couponCatalog,
+            CustomerDirectory customerDirectory) {
         this.orderRepository = orderRepository;
         this.orderRoundRepository = orderRoundRepository;
         this.productCatalog = productCatalog;
@@ -88,6 +91,7 @@ public class OrderService {
         this.pmsClient = pmsClient;
         this.managerAuthClient = managerAuthClient;
         this.couponCatalog = couponCatalog;
+        this.customerDirectory = customerDirectory;
     }
 
     @Transactional
@@ -633,6 +637,10 @@ public class OrderService {
         if (order.getCashierId() != null) userIds.add(order.getCashierId());
         Map<Long, String> names = userDirectory.namesByIds(userIds);
 
+        OrderDto.PersonRef customer = order.getCustomerId() == null ? null : customerDirectory.findById(order.getCustomerId())
+                .map(c -> new OrderDto.PersonRef(c.id(), c.name()))
+                .orElse(null);
+
         List<OrderDto.RoundDto> rounds = order.getRounds().stream()
                 .sorted(Comparator.comparingInt(OrderRound::getRoundNumber))
                 .map(this::toRoundDto)
@@ -648,11 +656,18 @@ public class OrderService {
                 table == null ? null : new OrderDto.TableRef(table.id(), table.name(), table.status()),
                 new OrderDto.PersonRef(order.getUserId(), order.getUserId() == null ? null : names.get(order.getUserId())),
                 new OrderDto.PersonRef(order.getCashierId(), order.getCashierId() == null ? null : names.get(order.getCashierId())),
+                customer,
                 rounds,
                 order.getNote(),
                 order.getCreatedAt() == null ? null : order.getCreatedAt().format(TIME),
                 order.getCreatedAt() == null ? null : order.getCreatedAt().format(DATE)
         );
+    }
+
+    /** Every order a coupon was applied to — backs the "Commandes" button on a coupon's admin card. */
+    @Transactional(readOnly = true)
+    public List<OrderDto> ordersByCoupon(Long couponId) {
+        return orderRepository.findByCouponIdOrderByIdDesc(couponId).stream().map(this::toDto).toList();
     }
 
     private OrderDto.RoundDto toRoundDto(OrderRound round) {

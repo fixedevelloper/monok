@@ -122,6 +122,16 @@ public class OrderController {
         return ApiResponse.success(orderService.historyAdmin(search, status, startDate, endDate, effectiveBranchId, pageable));
     }
 
+    /** Traceability view for a coupon's admin card ("Commandes" button, next to "Imprimer") — every
+     * order that coupon was applied to, most recent first. Lives here rather than under {@code
+     * CouponController} (crm) because {@code ordering} depends on {@code crm}, never the reverse —
+     * see {@code OrderService#ordersByCoupon}. */
+    @GetMapping("/api/admin/coupons/{couponId}/orders")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    public ApiResponse<List<OrderDto>> ordersByCoupon(@PathVariable Long couponId) {
+        return ApiResponse.success(orderService.ordersByCoupon(couponId));
+    }
+
     @GetMapping("/api/pos/waiter/orders")
     public List<OrderDto> waiterOrders(
             @RequestParam(required = false) LocalDate date,

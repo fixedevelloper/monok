@@ -77,6 +77,12 @@ public interface OrderRepository extends Repository<Order, Long> {
 
     List<Order> findByUserIdAndCreatedAtBetween(Long userId, LocalDateTime start, LocalDateTime end);
 
+    /** Every order a given coupon was applied to, most recent first — backs the admin "Commandes"
+     * view on a coupon's card (see {@code OrderController#ordersByCoupon}). Not filtered by
+     * status: a coupon applied then the order cancelled before payment is still a real use worth
+     * showing, not just paid orders. */
+    List<Order> findByCouponIdOrderByIdDesc(Long couponId);
+
     /** Port of {@code OrderController::index}/{@code historyAdmin} — every filter is optional,
      * {@code branchId} the same null-means-unscoped convention as {@link #findActive}. */
     @Query("""

@@ -7,12 +7,12 @@
  * {@code inventory} — see those modules' package-info for the one-directional
  * dependency this keeps. {@link ProductStockReceiver}, at the same root
  * package, is a second and deliberately separate published interface for
- * {@code inventory}: unlike the read-only {@code ProductCatalog}, it lets a
- * received purchase order line increment a storable product's stock —
- * implemented by the same {@code ProductService} that backs the admin
- * "Ajuster le stock" modal, since receiving a purchase and a manual stock
- * adjustment are the same underlying operation (traced movement + stock
- * update), not two separate concerns.
+ * {@code inventory}/{@code ordering}: unlike the read-only {@code ProductCatalog}, it lets a
+ * received purchase order line increment a storable product's stock, and lets a paid POS sale
+ * decrement it — implemented by the same {@code ProductService} that backs the admin
+ * "Ajuster le stock" modal, since receiving a purchase, selling a product and a manual stock
+ * adjustment are all the same underlying operation (traced movement + stock
+ * update), not separate concerns.
  *
  * <p>Deliberate deviations, each documented at its call site too:
  * <ul>

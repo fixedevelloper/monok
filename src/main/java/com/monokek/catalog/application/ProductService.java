@@ -184,6 +184,39 @@ public class ProductService implements ProductStockReceiver {
         productStockMovementRepository.save(movement);
     }
 
+    /** {@link ProductStockReceiver#deductForSale} — called by {@code ordering.application.
+     * ProductStockDeductionListener} when a POS sale is paid. Mirrors {@link #adjustStock}'s "out"
+     * branch (same movement bookkeeping), except it never throws on insufficient stock: by the time
+     * this runs the order is already paid and committed, so there's nothing left to roll back.
+     * Instead it clamps at zero and says so in the movement's reason, which is a real signal (stock
+     * count is untrustworthy) rather than a swallowed failure. A no-op for a product that doesn't
+     * track stock, so callers never need to check {@link Product#isTrackStock()} themselves. */
+    @Override
+    @Transactional
+    public void deductForSale(Long productId, int qty, Long orderId, Long cashierUserId) {
+        Product product = findOrThrow(productId);
+        if (!product.isTrackStock()) {
+            return;
+        }
+        int before = product.getStockCount();
+        int after = before - qty;
+        String reason = "Vente POS #" + orderId;
+        if (after < 0) {
+            reason += " (stock insuffisant : ajusté à 0)";
+            after = 0;
+        }
+        product.setStockCount(after);
+        productRepository.save(product);
+
+        ProductStockMovement movement = new ProductStockMovement();
+        movement.setProduct(product);
+        movement.setType("out");
+        movement.setQty(after - before);
+        movement.setReason(reason);
+        movement.setAuthorId(cashierUserId);
+        productStockMovementRepository.save(movement);
+    }
+
     @Transactional(readOnly = true)
     public List<ProductStockMovementDto> listStockMovements(Long productId) {
         findOrThrow(productId);

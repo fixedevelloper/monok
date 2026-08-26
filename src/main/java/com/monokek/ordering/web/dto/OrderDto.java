@@ -15,6 +15,7 @@ public record OrderDto(
         TableRef table,
         PersonRef waiter,
         PersonRef cashier,
+        PersonRef customer,
         List<RoundDto> rounds,
         String note,
         String time,

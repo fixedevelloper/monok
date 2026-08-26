@@ -23,6 +23,15 @@
  * {@code domain.event.SessionReportReadyEvent} for {@code printing} — same
  * "fold the data into the event, resolve it where the dependency is already
  * allowed" shape as everything else above.
+ *
+ * <p>{@code application.ProductStockDeductionListener} reacts to this module's own
+ * {@code domain.event.OrderStatusChangedEvent} (status "paid") to decrement a directly-stocked
+ * {@code catalog} product's stock count through {@link com.monokek.catalog.ProductStockReceiver}
+ * — the sibling of {@code inventory.application.StockDeductionListener}, which does the same for
+ * recipe ingredients. Lives here rather than in {@code catalog} because the dependency only runs
+ * {@code ordering -> catalog} (via {@link com.monokek.catalog.ProductCatalog}/{@code
+ * ProductStockReceiver}), never the other way — a listener in {@code catalog} reacting to an
+ * {@code ordering} event would cycle the two modules.
  */
 @org.springframework.modulith.ApplicationModule(displayName = "Ordering")
 package com.monokek.ordering;
