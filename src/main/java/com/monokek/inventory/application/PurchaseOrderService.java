@@ -70,7 +70,7 @@ public class PurchaseOrderService {
             }
 
             if (hasIngredient) {
-                receiveIngredientLine(purchaseOrder, line);
+                receiveIngredientLine(purchaseOrder, line, authorId);
             } else {
                 receiveProductLine(purchaseOrder, line, authorId);
             }
@@ -79,7 +79,7 @@ public class PurchaseOrderService {
         purchaseOrderRepository.save(purchaseOrder);
     }
 
-    private void receiveIngredientLine(PurchaseOrder purchaseOrder, CreatePurchaseOrderRequest.Line line) {
+    private void receiveIngredientLine(PurchaseOrder purchaseOrder, CreatePurchaseOrderRequest.Line line, Long authorId) {
         Ingredient ingredient = ingredientRepository.findById(line.ingredientId())
                 .orElseThrow(() -> ApiException.badRequest("Ingrédient introuvable : " + line.ingredientId()));
 
@@ -92,6 +92,7 @@ public class PurchaseOrderService {
         movement.setType("in");
         movement.setQty(line.qty());
         movement.setReason("Achat #" + purchaseOrder.getId());
+        movement.setAuthorId(authorId);
         stockMovementRepository.save(movement);
     }
 

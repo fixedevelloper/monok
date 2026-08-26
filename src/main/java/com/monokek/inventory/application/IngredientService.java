@@ -56,7 +56,7 @@ public class IngredientService {
     }
 
     @Transactional
-    public IngredientDto create(CreateIngredientRequest request) {
+    public IngredientDto create(CreateIngredientRequest request, Long authorId) {
         if (ingredientRepository.existsByName(request.name())) {
             throw ApiException.conflict("Un ingrédient porte déjà ce nom.");
         }
@@ -70,29 +70,30 @@ public class IngredientService {
         ingredient = ingredientRepository.save(ingredient);
 
         if (request.stock().signum() > 0) {
-            recordMovement(ingredient, "in", request.stock(), "Stock initial à la création");
+            recordMovement(ingredient, "in", request.stock(), "Stock initial à la création", authorId);
         }
         return toDto(ingredient);
     }
 
     @Transactional
-    public BigDecimal adjustStock(Long ingredientId, AdjustStockRequest request) {
+    public BigDecimal adjustStock(Long ingredientId, AdjustStockRequest request, Long authorId) {
         Ingredient ingredient = ingredientRepository.findById(ingredientId)
                 .orElseThrow(() -> ApiException.notFound("Ingrédient introuvable"));
 
         ingredient.applyMovement(request.type(), request.qty());
         ingredientRepository.save(ingredient);
-        recordMovement(ingredient, request.type(), request.qty(), request.reason() == null ? "Ajustement manuel" : request.reason());
+        recordMovement(ingredient, request.type(), request.qty(), request.reason() == null ? "Ajustement manuel" : request.reason(), authorId);
 
         return ingredient.getStock();
     }
 
-    private void recordMovement(Ingredient ingredient, String type, BigDecimal qty, String reason) {
+    private void recordMovement(Ingredient ingredient, String type, BigDecimal qty, String reason, Long authorId) {
         StockMovement movement = new StockMovement();
         movement.setIngredient(ingredient);
         movement.setType(type);
         movement.setQty(qty);
         movement.setReason(reason);
+        movement.setAuthorId(authorId);
         stockMovementRepository.save(movement);
     }
 

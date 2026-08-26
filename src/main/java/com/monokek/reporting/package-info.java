@@ -61,6 +61,14 @@
  *       have no stored current unit cost, so this is an approximation off the
  *       latest known purchase price rather than a weighted average.</li>
  * </ul>
+ *
+ * <p><b>{@code application.StockMovementReportingService}</b> is new functionality, not a Laravel
+ * port, added later on the same architectural exception: it {@code UNION ALL}s {@code inventory}'s
+ * {@code stock_movements} (recipe ingredients) and {@code catalog}'s {@code product_stock_movements}
+ * (storable products) into one filterable, paginated feed for the admin stock-history page —
+ * neither module exposes a published interface for "every movement across every subject with
+ * these filters", and building that from their narrow interfaces would mean pulling both full
+ * result sets into Java and merge-sorting by hand.
  */
 @org.springframework.modulith.ApplicationModule(displayName = "Reporting")
 package com.monokek.reporting;

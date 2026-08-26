@@ -1,5 +1,6 @@
 package com.monokek.inventory.web;
 
+import com.monokek.identity.CurrentUser;
 import com.monokek.inventory.application.IngredientService;
 import com.monokek.inventory.web.dto.*;
 import jakarta.validation.Valid;
@@ -7,6 +8,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -38,8 +40,8 @@ public class IngredientController {
     @PostMapping("/ingredients")
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('manage_stock'))")
-    public IngredientDto store(@Valid @RequestBody CreateIngredientRequest request) {
-        return ingredientService.create(request);
+    public IngredientDto store(@Valid @RequestBody CreateIngredientRequest request, @AuthenticationPrincipal CurrentUser principal) {
+        return ingredientService.create(request, principal.id());
     }
 
     @GetMapping("/units")
@@ -54,8 +56,10 @@ public class IngredientController {
 
     @PostMapping("/ingredients/{ingredientId}/adjust")
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('manage_stock'))")
-    public Map<String, Object> adjustStock(@PathVariable Long ingredientId, @Valid @RequestBody AdjustStockRequest request) {
-        BigDecimal newStock = ingredientService.adjustStock(ingredientId, request);
+    public Map<String, Object> adjustStock(
+            @PathVariable Long ingredientId, @Valid @RequestBody AdjustStockRequest request,
+            @AuthenticationPrincipal CurrentUser principal) {
+        BigDecimal newStock = ingredientService.adjustStock(ingredientId, request, principal.id());
         return Map.of("message", "Stock mis à jour", "new_stock", newStock);
     }
 }

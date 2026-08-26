@@ -31,4 +31,11 @@ public class StockMovement extends Timestamps {
 
     @Column(columnDefinition = "TEXT")
     private String reason;
+
+    /** Who performed the movement — null for the automatic sale-deduction listener (see {@code
+     * StockDeductionListener}), which has no human actor. References identity.User by id only,
+     * resolved to a display name via {@code UserDirectory} at read time — see {@code
+     * catalog.domain.ProductStockMovement#authorId} for the same convention. */
+    @Column(name = "author_id")
+    private Long authorId;
 }
