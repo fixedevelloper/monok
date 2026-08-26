@@ -3,8 +3,10 @@
  * and stock movements. Implemented end-to-end. Depends one-directionally on
  * {@code ordering}'s {@code domain.event} named interface and on
  * {@code catalog} ({@code ProductCatalog}, to resolve a product's name for
- * recipe responses) — same shape as {@code kitchen}: neither {@code ordering}
- * nor {@code catalog} ever depends back on {@code inventory}.
+ * recipe responses, and {@code ProductStockReceiver}, to receive a supplier
+ * purchase order line into a resellable product's stock) — same shape as
+ * {@code kitchen}: neither {@code ordering} nor {@code catalog} ever depends
+ * back on {@code inventory}.
  *
  * <p>{@code application.StockDeductionListener} reacts to
  * {@code OrderStatusChangedEvent} to deduct recipe ingredients when an order

@@ -121,6 +121,62 @@ public class AccountingService {
     private record SessionInfo(LocalDateTime openedAt, LocalDateTime closedAt, Long branchId, String registerName, String cashierName) {
     }
 
+    /** Backs the "Exporter Excel" button on the admin order-history page ({@code history/page.tsx}) —
+     * every filter mirrors {@code OrderController#historyAdmin}/{@code OrderRepository#search} exactly
+     * (search matches only the order reference, {@code status} is an exact match, dates are optional
+     * bounds on {@code created_at}), so the export always matches whatever the page currently shows.
+     * {@code branchId} null means unscoped, same convention as {@link #build}. Kept separate from the
+     * {@code builders} map above since its parameter shape (optional dates, search, status) doesn't fit
+     * the four fixed OHADA reports' {@code ReportParams} — same reasoning as {@link #buildForSession}. */
+    @Transactional(readOnly = true)
+    public ReportTable ordersHistory(String search, String status, LocalDate startDate, LocalDate endDate, Long branchId) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("search", (search == null || search.isBlank()) ? null : search)
+                .addValue("status", (status == null || status.isBlank()) ? null : status)
+                .addValue("from", startDate == null ? null : startDate.atStartOfDay())
+                .addValue("to", endDate == null ? null : endDate.atTime(java.time.LocalTime.MAX))
+                .addValue("branchId", branchId);
+
+        List<List<Object>> rows = jdbc.query(
+                """
+                SELECT o.created_at AS dt, o.reference AS ref, t.name AS table_name, u.name AS waiter,
+                       o.status AS status, o.subtotal AS subtotal, o.discount AS discount, o.total AS total
+                FROM orders o
+                LEFT JOIN restaurant_tables t ON o.table_id = t.id
+                LEFT JOIN users u ON o.user_id = u.id
+                WHERE (:search IS NULL OR LOWER(o.reference) LIKE LOWER(CONCAT('%', :search, '%')))
+                  AND (:status IS NULL OR o.status = :status)
+                  AND (:from IS NULL OR o.created_at >= :from)
+                  AND (:to IS NULL OR o.created_at <= :to)
+                  AND (:branchId IS NULL OR o.branch_id = :branchId)
+                ORDER BY o.created_at DESC
+                """, params,
+                (rs, i) -> List.<Object>of(
+                        rs.getTimestamp("dt").toLocalDateTime().toString(),
+                        rs.getString("ref"),
+                        rs.getString("table_name") == null ? "Emporter" : rs.getString("table_name"),
+                        rs.getString("waiter") == null ? "" : rs.getString("waiter"),
+                        orderStatusLabel(rs.getString("status")),
+                        rs.getBigDecimal("subtotal"),
+                        rs.getBigDecimal("discount"),
+                        rs.getBigDecimal("total")));
+
+        rows = withTotalRow(rows, List.of(5, 6, 7), "TOTAL");
+        LocalDate start = startDate != null ? startDate : LocalDate.EPOCH;
+        LocalDate end = endDate != null ? endDate : LocalDate.now();
+        return new ReportTable("Historique des Commandes", start, end,
+                List.of("Date", "N° Commande", "Table", "Serveur", "Statut", "Sous-total", "Remise", "Total"), rows);
+    }
+
+    private String orderStatusLabel(String status) {
+        return switch (status) {
+            case "paid" -> "Payée";
+            case "cancelled" -> "Annulée";
+            case "completed" -> "Attente paiement";
+            default -> status;
+        };
+    }
+
     /** "Journal Général des Ventes" — Z de caisse cumulé jour par jour, avec une ligne TOTAL en pied de journal. */
     private ReportTable salesSummary(ReportParams params) {
         List<List<Object>> rows = jdbc.query(

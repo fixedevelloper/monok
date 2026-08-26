@@ -49,4 +49,13 @@ public class PurchaseOrder extends Timestamps {
         this.total = this.total.add(price.multiply(qty));
         return item;
     }
+
+    /** Same as {@link #addItem(Ingredient, BigDecimal, BigDecimal)} for a line that buys a
+     * resellable {@code catalog.Product} instead of a recipe ingredient. */
+    public PurchaseOrderItem addItem(Long productId, BigDecimal qty, BigDecimal price) {
+        PurchaseOrderItem item = PurchaseOrderItem.ofProduct(this, productId, qty, price);
+        items.add(item);
+        this.total = this.total.add(price.multiply(qty));
+        return item;
+    }
 }

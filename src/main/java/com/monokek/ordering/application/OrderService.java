@@ -3,6 +3,7 @@ package com.monokek.ordering.application;
 import com.monokek.cashier.CashierFacade;
 import com.monokek.catalog.ProductCatalog;
 import com.monokek.common.ApiException;
+import com.monokek.crm.CouponCatalog;
 import com.monokek.floorplan.TableDirectory;
 import com.monokek.identity.ManagerAuthClient;
 import com.monokek.identity.UserDirectory;
@@ -62,6 +63,7 @@ public class OrderService {
     private final ApplicationEventPublisher events;
     private final PmsClient pmsClient;
     private final ManagerAuthClient managerAuthClient;
+    private final CouponCatalog couponCatalog;
 
     public OrderService(
             OrderRepository orderRepository,
@@ -73,7 +75,8 @@ public class OrderService {
             CommissionService commissionService,
             ApplicationEventPublisher events,
             PmsClient pmsClient,
-            ManagerAuthClient managerAuthClient) {
+            ManagerAuthClient managerAuthClient,
+            CouponCatalog couponCatalog) {
         this.orderRepository = orderRepository;
         this.orderRoundRepository = orderRoundRepository;
         this.productCatalog = productCatalog;
@@ -84,6 +87,7 @@ public class OrderService {
         this.events = events;
         this.pmsClient = pmsClient;
         this.managerAuthClient = managerAuthClient;
+        this.couponCatalog = couponCatalog;
     }
 
     @Transactional
@@ -232,6 +236,31 @@ public class OrderService {
         return userId == null ? null : userDirectory.namesByIds(Set.of(userId)).get(userId);
     }
 
+    /** Prices {@code code} against this order's current subtotal (expiry, minimum amount, usage cap
+     * — see {@code CouponCatalog#quote}) and applies it if valid, replacing any coupon already on
+     * the order. Only allowed while the order is still open — same guard as adding a round. */
+    @Transactional
+    public OrderDto applyCoupon(UUID orderUuid, String code) {
+        Order order = orderRepository.findByUuid(orderUuid).orElseThrow(() -> ApiException.notFound("Commande introuvable."));
+        order.assertOpen();
+
+        CouponCatalog.CouponQuote quote = couponCatalog.quote(code, order.getSubtotal());
+        if (!quote.valid()) {
+            throw ApiException.badRequest(quote.message());
+        }
+        order.applyCoupon(quote.couponId(), quote.code(), quote.discountAmount());
+        return toDto(orderRepository.save(order));
+    }
+
+    /** Clears whatever coupon is on the order, if any — lets the cashier back out before paying. */
+    @Transactional
+    public OrderDto removeCoupon(UUID orderUuid) {
+        Order order = orderRepository.findByUuid(orderUuid).orElseThrow(() -> ApiException.notFound("Commande introuvable."));
+        order.assertOpen();
+        order.removeCoupon();
+        return toDto(orderRepository.save(order));
+    }
+
     @Transactional
     public void finalizePayment(UUID orderUuid, FinalizePaymentRequest request, Long cashierUserId, String bearerToken) {
         Long sessionId = cashierFacade.findOpenSessionId(cashierUserId)
@@ -251,6 +280,12 @@ public class OrderService {
 
         order.markPaid(cashierUserId);
         orderRepository.save(order);
+
+        // Only counted as a redemption once the order actually gets paid — applying a coupon then
+        // cancelling the order must not consume it. See CouponCatalog#redeem's own doc.
+        if (order.getCouponId() != null) {
+            couponCatalog.redeem(order.getCouponId());
+        }
 
         commissionService.calculateCommissions(order);
 
@@ -579,7 +614,7 @@ public class OrderService {
                 order.getReference(),
                 order.getType(),
                 order.getStatus(),
-                new OrderDto.Amounts(order.getSubtotal(), order.getTax(), order.getDiscount(), order.getTotal(), formatFcfa(order.getTotal())),
+                new OrderDto.Amounts(order.getSubtotal(), order.getTax(), order.getDiscount(), order.getTotal(), formatFcfa(order.getTotal()), order.getCouponCode()),
                 table == null ? null : new OrderDto.TableRef(table.id(), table.name(), table.status()),
                 new OrderDto.PersonRef(order.getUserId(), order.getUserId() == null ? null : names.get(order.getUserId())),
                 new OrderDto.PersonRef(order.getCashierId(), order.getCashierId() == null ? null : names.get(order.getCashierId())),

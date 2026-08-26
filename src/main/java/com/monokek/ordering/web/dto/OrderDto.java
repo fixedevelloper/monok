@@ -20,7 +20,7 @@ public record OrderDto(
         String time,
         String date
 ) {
-    public record Amounts(BigDecimal subtotal, BigDecimal tax, BigDecimal discount, BigDecimal total, String formattedTotal) {
+    public record Amounts(BigDecimal subtotal, BigDecimal tax, BigDecimal discount, BigDecimal total, String formattedTotal, String couponCode) {
     }
 
     public record TableRef(Long id, String name, String status) {

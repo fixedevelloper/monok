@@ -1,7 +1,9 @@
 package com.monokek.inventory.web;
 
+import com.monokek.inventory.application.PurchaseOrderService;
 import com.monokek.inventory.application.SupplierService;
 import com.monokek.inventory.web.dto.CreateSupplierRequest;
+import com.monokek.inventory.web.dto.PurchaseOrderDto;
 import com.monokek.inventory.web.dto.SupplierDto;
 import com.monokek.inventory.web.dto.UpdateSupplierRequest;
 import jakarta.validation.Valid;
@@ -22,9 +24,11 @@ import java.util.List;
 public class SupplierController {
 
     private final SupplierService supplierService;
+    private final PurchaseOrderService purchaseOrderService;
 
-    public SupplierController(SupplierService supplierService) {
+    public SupplierController(SupplierService supplierService, PurchaseOrderService purchaseOrderService) {
         this.supplierService = supplierService;
+        this.purchaseOrderService = purchaseOrderService;
     }
 
     @GetMapping
@@ -54,5 +58,12 @@ public class SupplierController {
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('manage_stock'))")
     public void destroy(@PathVariable Long id) {
         supplierService.delete(id);
+    }
+
+    /** Purchase history backing the "Achats" section of the admin supplier detail page — new
+     * functionality, see {@code PurchaseOrderService#listBySupplier}. */
+    @GetMapping("/{id}/purchase-orders")
+    public List<PurchaseOrderDto> purchaseOrders(@PathVariable Long id) {
+        return purchaseOrderService.listBySupplier(id);
     }
 }

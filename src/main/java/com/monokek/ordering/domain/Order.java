@@ -81,6 +81,15 @@ public class Order extends Timestamps {
     @Column(precision = 12, scale = 2)
     private BigDecimal discount = BigDecimal.ZERO;
 
+    /** References crm.Coupon by id only — see module package-info. Null means no coupon applied. */
+    @Column(name = "coupon_id")
+    private Long couponId;
+
+    /** Snapshot of the coupon's code at the time it was applied, so the receipt/history still shows
+     * it even if the coupon is later renamed or deleted. */
+    @Column(name = "coupon_code")
+    private String couponCode;
+
     @Column(precision = 12, scale = 2)
     private BigDecimal total = BigDecimal.ZERO;
 
@@ -169,6 +178,24 @@ public class Order extends Timestamps {
     /** Excludes voided rounds — a voided round's items are removed from the bill, not just hidden. */
     public List<OrderItem> allItems() {
         return rounds.stream().filter(r -> !"voided".equals(r.getStatus())).flatMap(r -> r.getItems().stream()).toList();
+    }
+
+    /** Applies a coupon's discount — {@code discountAmount} is expected already clamped to this
+     * order's subtotal by the caller (see {@code crm.CouponCatalog#quote}), so {@code total} in
+     * {@link #refreshTotals} never goes negative. Replaces any previously-applied coupon. */
+    public void applyCoupon(Long couponId, String code, BigDecimal discountAmount) {
+        this.couponId = couponId;
+        this.couponCode = code;
+        this.discount = discountAmount;
+        refreshTotals();
+    }
+
+    /** Clears whatever coupon was applied, if any — a no-op discount-wise if none was. */
+    public void removeCoupon() {
+        this.couponId = null;
+        this.couponCode = null;
+        this.discount = BigDecimal.ZERO;
+        refreshTotals();
     }
 
     /** Transitions status, appends an {@link OrderStatusHistory} entry and stages an {@link OrderStatusChangedEvent}. */

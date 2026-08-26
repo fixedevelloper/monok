@@ -34,6 +34,19 @@ public class OrderController {
         return orderService.sendRound(request, principal.id(), principal.id());
     }
 
+    /** Prices and applies a coupon against this order's current subtotal — see {@code OrderService#applyCoupon}.
+     * Replaces any coupon already on the order. {@code 400} if the code is unknown, expired, exhausted, or
+     * the order doesn't meet the coupon's minimum amount. */
+    @PostMapping("/api/pos/orders/{uuid}/coupon")
+    public ApiResponse<OrderDto> applyCoupon(@PathVariable UUID uuid, @Valid @RequestBody ApplyCouponRequest request) {
+        return ApiResponse.success(orderService.applyCoupon(uuid, request.code()), "Coupon appliqué");
+    }
+
+    @DeleteMapping("/api/pos/orders/{uuid}/coupon")
+    public ApiResponse<OrderDto> removeCoupon(@PathVariable UUID uuid) {
+        return ApiResponse.success(orderService.removeCoupon(uuid), "Coupon retiré");
+    }
+
     @PostMapping("/api/pos/orders/{uuid}/finalize")
     public ApiResponse<Void> finalizePayment(
             @PathVariable UUID uuid, @Valid @RequestBody FinalizePaymentRequest request,

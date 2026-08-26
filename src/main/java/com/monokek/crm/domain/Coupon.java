@@ -1,5 +1,6 @@
 package com.monokek.crm.domain;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -27,10 +28,36 @@ public class Coupon {
 
     private BigDecimal amount;
 
+    /** Minimum order subtotal required to apply this coupon. Null means no minimum. */
+    @Column(name = "min_amount")
+    private BigDecimal minAmount;
+
     private LocalDateTime expiresAt;
 
-    /** The schema has no "redeemed" flag — a coupon stays valid, reusable, until it expires. */
+    /** Caps how many orders can redeem this coupon in total. Null means unlimited — the coupon
+     * stays reusable until it expires, same as before this field existed. */
+    @Column(name = "max_uses")
+    private Integer maxUses;
+
+    /** Incremented once per order that actually gets paid with this coupon applied — see
+     * {@code ordering.application.OrderService#finalizePayment}. Applying a coupon to an order
+     * that later gets cancelled does NOT count as a use. */
+    @Column(name = "times_used", nullable = false)
+    private int timesUsed = 0;
+
     public boolean isExpired() {
         return expiresAt != null && expiresAt.isBefore(LocalDateTime.now());
+    }
+
+    public boolean isExhausted() {
+        return maxUses != null && timesUsed >= maxUses;
+    }
+
+    public boolean meetsMinimum(BigDecimal orderSubtotal) {
+        return minAmount == null || orderSubtotal.compareTo(minAmount) >= 0;
+    }
+
+    public void recordUse() {
+        timesUsed++;
     }
 }

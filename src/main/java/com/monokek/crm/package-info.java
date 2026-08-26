@@ -14,6 +14,12 @@
  * existing behavior. {@code Customer} stages {@code LoyaltyPointsChangedEvent}
  * the same way monokek-identity's {@code User} aggregate stages its events; {@code settings}
  * picks it up like it does every other module's events.
+ *
+ * <p>{@link CouponCatalog} is the same shape of dependency as {@link CustomerDirectory}, added
+ * later so {@code ordering.application.OrderService} can price/redeem a coupon against a specific
+ * order (expiry, minimum amount, usage cap) without reaching into {@code crm.domain} — implemented
+ * by the same {@code CouponService} that backs the admin coupon CRUD, since pricing a coupon
+ * against an order and validating it are the same business rule, not two separate concerns.
  */
 @org.springframework.modulith.ApplicationModule(displayName = "CRM")
 package com.monokek.crm;

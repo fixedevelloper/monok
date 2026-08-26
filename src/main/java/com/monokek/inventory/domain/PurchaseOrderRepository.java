@@ -14,4 +14,6 @@ public interface PurchaseOrderRepository extends Repository<PurchaseOrder, Long>
     Optional<PurchaseOrder> findById(Long id);
 
     List<PurchaseOrder> findAll();
+
+    List<PurchaseOrder> findBySupplierIdOrderByIdDesc(Long supplierId);
 }

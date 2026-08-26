@@ -76,6 +76,26 @@ public class AccountingController {
         return render(table, format, "shift_" + sessionId);
     }
 
+    /** Backs the "Exporter Excel" button on the admin order-history page — filters mirror
+     * {@code OrderController#historyAdmin} exactly (all optional) so the export always matches
+     * whatever's currently on screen. {@code branchId} follows the same effective-branch pattern
+     * as {@link #export}. Kept as its own path (not {@code /{report}}) since its filters (search,
+     * status, optional dates) don't fit the four fixed reports' {@code start_date}/{@code end_date}. */
+    @GetMapping("/orders-history")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('view_reports'))")
+    public ResponseEntity<byte[]> exportOrdersHistory(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam String format,
+            @RequestParam(required = false) Long branchId,
+            @AuthenticationPrincipal CurrentUser principal) {
+        Long effectiveBranchId = principal.branchId() != null ? principal.branchId() : branchId;
+        ReportTable table = accountingService.ordersHistory(search, status, startDate, endDate, effectiveBranchId);
+        return render(table, format, "historique_commandes");
+    }
+
     private ResponseEntity<byte[]> render(ReportTable table, String format, String filenameBase) {
         byte[] body;
         MediaType contentType;

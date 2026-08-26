@@ -102,4 +102,21 @@ public class ProductController {
         productService.syncModifiers(id, request.modifierIds());
         return Map.of("message", "Modificateurs synchronisés");
     }
+
+    /** The only way left to move a product's {@code stockCount} — the edit form's old direct field
+     * is gone (see {@code UpdateProductRequest}). Same guard as {@code IngredientController#adjustStock}:
+     * an Admin always can, a Manager only with the {@code manage_stock} authority. */
+    @PostMapping("/api/admin/products/{id}/stock/adjust")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('manage_stock'))")
+    public ProductDto adjustStock(
+            @PathVariable Long id, @Valid @RequestBody AdjustProductStockRequest request,
+            @AuthenticationPrincipal CurrentUser principal) {
+        return productService.adjustStock(id, request, principal.id());
+    }
+
+    @GetMapping("/api/admin/products/{id}/stock/movements")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('manage_stock'))")
+    public List<ProductStockMovementDto> stockMovements(@PathVariable Long id) {
+        return productService.listStockMovements(id);
+    }
 }

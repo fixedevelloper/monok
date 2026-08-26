@@ -1,8 +1,10 @@
 package com.monokek.catalog.application;
 
 import com.monokek.common.ApiException;
+import com.monokek.catalog.ProductStockReceiver;
 import com.monokek.catalog.domain.*;
 import com.monokek.catalog.web.dto.*;
+import com.monokek.identity.UserDirectory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -11,7 +13,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -22,24 +26,32 @@ import java.util.stream.Collectors;
  * there's nothing to reach them in the source app.
  */
 @Service
-public class ProductService {
+public class ProductService implements ProductStockReceiver {
 
     private static final List<String> VALID_TYPES = List.of("storable", "consumable", "service");
+    private static final List<String> VALID_MOVEMENT_TYPES = List.of("in", "out", "adjust");
+    private static final DateTimeFormatter DATE = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
 
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
     private final ModifierRepository modifierRepository;
     private final ModifierProductRepository modifierProductRepository;
+    private final ProductStockMovementRepository productStockMovementRepository;
+    private final UserDirectory userDirectory;
 
     public ProductService(
             ProductRepository productRepository,
             CategoryRepository categoryRepository,
             ModifierRepository modifierRepository,
-            ModifierProductRepository modifierProductRepository) {
+            ModifierProductRepository modifierProductRepository,
+            ProductStockMovementRepository productStockMovementRepository,
+            UserDirectory userDirectory) {
         this.productRepository = productRepository;
         this.categoryRepository = categoryRepository;
         this.modifierRepository = modifierRepository;
         this.modifierProductRepository = modifierProductRepository;
+        this.productStockMovementRepository = productStockMovementRepository;
+        this.userDirectory = userDirectory;
     }
 
     @Transactional(readOnly = true)
@@ -103,7 +115,6 @@ public class ProductService {
         if (request.price() != null) product.setPrice(request.price());
         if (request.purchasePrice() != null) product.setPurchasePrice(request.purchasePrice());
         if (request.incentiveAmount() != null) product.setIncentiveAmount(request.incentiveAmount());
-        if (request.stockCount() != null) product.setStockCount(request.stockCount());
         if (request.alertStock() != null) product.setAlertStock(request.alertStock());
         if (request.type() != null) {
             validateType(request.type());
@@ -115,6 +126,77 @@ public class ProductService {
         if (request.description() != null) product.setDescription(request.description());
 
         return toDto(productRepository.save(product));
+    }
+
+    /** The only path left that can move {@link Product#getStockCount()} — {@code
+     * UpdateProductRequest} no longer accepts it, so every change from here on is traced by a
+     * {@link ProductStockMovement}. "in"/"out" move {@code qty} units; "adjust" treats {@code qty}
+     * as the new absolute count from a physical stock take, recording whatever delta that implies. */
+    @Transactional
+    public ProductDto adjustStock(Long productId, AdjustProductStockRequest request, Long authorId) {
+        if (!VALID_MOVEMENT_TYPES.contains(request.type())) {
+            throw ApiException.badRequest("Type de mouvement inconnu : " + request.type());
+        }
+        Product product = findOrThrow(productId);
+        int before = product.getStockCount();
+        int delta = switch (request.type()) {
+            case "in" -> request.qty();
+            case "out" -> -request.qty();
+            default -> request.qty() - before; // "adjust"
+        };
+        if (before + delta < 0) {
+            throw ApiException.badRequest("Stock insuffisant pour cette sortie.");
+        }
+        product.setStockCount(before + delta);
+        productRepository.save(product);
+
+        ProductStockMovement movement = new ProductStockMovement();
+        movement.setProduct(product);
+        movement.setType(request.type());
+        movement.setQty(delta);
+        movement.setReason(request.reason() == null || request.reason().isBlank() ? "Ajustement manuel" : request.reason());
+        movement.setAuthorId(authorId);
+        productStockMovementRepository.save(movement);
+
+        return toDto(product);
+    }
+
+    /** {@link ProductStockReceiver#receivePurchase} — called by {@code inventory.PurchaseOrderService}
+     * when a purchase order line references a {@code Product} (a resellable item, e.g. a crate of
+     * soda) instead of a recipe {@code Ingredient}. Always an "in" movement; unlike {@link
+     * #adjustStock} there's no negative-stock check to make (a purchase only ever adds stock). */
+    @Override
+    @Transactional
+    public void receivePurchase(Long productId, int qty, BigDecimal unitPrice, String reason, Long authorId) {
+        Product product = findOrThrow(productId);
+        product.setStockCount(product.getStockCount() + qty);
+        if (unitPrice != null) {
+            product.setPurchasePrice(unitPrice);
+        }
+        productRepository.save(product);
+
+        ProductStockMovement movement = new ProductStockMovement();
+        movement.setProduct(product);
+        movement.setType("in");
+        movement.setQty(qty);
+        movement.setReason(reason);
+        movement.setAuthorId(authorId);
+        productStockMovementRepository.save(movement);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ProductStockMovementDto> listStockMovements(Long productId) {
+        findOrThrow(productId);
+        List<ProductStockMovement> movements = productStockMovementRepository.findByProductIdOrderByIdDesc(productId);
+        Map<Long, String> authorNames = userDirectory.namesByIds(movements.stream().map(ProductStockMovement::getAuthorId).toList());
+
+        return movements.stream()
+                .map(m -> new ProductStockMovementDto(
+                        m.getId(), productId, m.getType(), m.getQty(),
+                        m.getReason() == null ? "Aucune note" : m.getReason(),
+                        m.getAuthorId(), authorNames.getOrDefault(m.getAuthorId(), "Utilisateur inconnu"),
+                        m.getCreatedAt() == null ? null : m.getCreatedAt().format(DATE)))
+                .toList();
     }
 
     @Transactional

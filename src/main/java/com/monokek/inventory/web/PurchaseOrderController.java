@@ -1,9 +1,11 @@
 package com.monokek.inventory.web;
 
 import com.monokek.common.ApiResponse;
+import com.monokek.identity.CurrentUser;
 import com.monokek.inventory.application.PurchaseOrderService;
 import com.monokek.inventory.web.dto.CreatePurchaseOrderRequest;
 import jakarta.validation.Valid;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.security.access.prepost.PreAuthorize;
 
@@ -25,8 +27,8 @@ public class PurchaseOrderController {
 
     @PostMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') and (hasRole('ADMIN') or hasAuthority('manage_stock'))")
-    public ApiResponse<Void> store(@Valid @RequestBody CreatePurchaseOrderRequest request) {
-        purchaseOrderService.store(request);
+    public ApiResponse<Void> store(@Valid @RequestBody CreatePurchaseOrderRequest request, @AuthenticationPrincipal CurrentUser principal) {
+        purchaseOrderService.store(request, principal.id());
         return ApiResponse.message("Commande fournisseur enregistrée et stock mis à jour");
     }
 }
