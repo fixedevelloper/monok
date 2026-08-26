@@ -36,9 +36,11 @@ public class StockMovementReportController {
             @RequestParam(required = false) String type,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(required = false) Long ingredientId,
+            @RequestParam(required = false) Long productId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
         int cappedSize = Math.min(size, 5000);
-        return stockMovementReportingService.search(search, type, startDate, endDate, page, cappedSize);
+        return stockMovementReportingService.search(search, type, startDate, endDate, ingredientId, productId, page, cappedSize);
     }
 }

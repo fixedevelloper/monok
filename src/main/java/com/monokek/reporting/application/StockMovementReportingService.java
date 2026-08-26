@@ -28,7 +28,8 @@ public class StockMovementReportingService {
             SELECT sm.created_at AS occurred_at, 'ingredient' AS subject_type, i.name AS subject_name,
                    sm.type AS base_type,
                    CASE WHEN sm.type = 'out' THEN -sm.qty ELSE sm.qty END AS signed_qty,
-                   sm.reason AS reason, COALESCE(u.name, 'Système') AS author_name
+                   sm.reason AS reason, COALESCE(u.name, 'Système') AS author_name,
+                   sm.ingredient_id AS ingredient_id, NULL AS product_id
             FROM stock_movements sm
             JOIN ingredients i ON sm.ingredient_id = i.id
             LEFT JOIN users u ON sm.author_id = u.id
@@ -38,7 +39,8 @@ public class StockMovementReportingService {
             SELECT psm.created_at AS occurred_at, 'product' AS subject_type, p.name AS subject_name,
                    psm.type AS base_type,
                    psm.qty AS signed_qty,
-                   psm.reason AS reason, COALESCE(u.name, 'Système') AS author_name
+                   psm.reason AS reason, COALESCE(u.name, 'Système') AS author_name,
+                   NULL AS ingredient_id, psm.product_id AS product_id
             FROM product_stock_movements psm
             JOIN products p ON psm.product_id = p.id
             LEFT JOIN users u ON psm.author_id = u.id
@@ -52,6 +54,8 @@ public class StockMovementReportingService {
                    OR (:type <> 'purchase' AND base_type = :type))
               AND (:from IS NULL OR occurred_at >= :from)
               AND (:to IS NULL OR occurred_at <= :to)
+              AND (:ingredientId IS NULL OR ingredient_id = :ingredientId)
+              AND (:productId IS NULL OR product_id = :productId)
             """;
 
     private final NamedParameterJdbcTemplate jdbc;
@@ -62,14 +66,20 @@ public class StockMovementReportingService {
 
     /** {@code type} is "in"/"out"/"adjust"/"purchase" — "purchase" narrows to entries whose reason
      * marks them as a supplier purchase (still fundamentally an "in" movement, see class doc), any
-     * other value filters on the raw movement type. Null/blank means no type filter at all. */
+     * other value filters on the raw movement type. Null/blank means no type filter at all.
+     * {@code ingredientId}/{@code productId} scope the feed to one specific subject — used by the
+     * "Historique" deep link on an ingredient's/product's own admin page. */
     @Transactional(readOnly = true)
-    public StockMovementPageDto search(String search, String type, LocalDate startDate, LocalDate endDate, int page, int size) {
+    public StockMovementPageDto search(
+            String search, String type, LocalDate startDate, LocalDate endDate,
+            Long ingredientId, Long productId, int page, int size) {
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("search", blankToNull(search))
                 .addValue("type", blankToNull(type))
                 .addValue("from", startDate == null ? null : startDate.atStartOfDay())
-                .addValue("to", endDate == null ? null : endDate.atTime(LocalTime.MAX));
+                .addValue("to", endDate == null ? null : endDate.atTime(LocalTime.MAX))
+                .addValue("ingredientId", ingredientId)
+                .addValue("productId", productId);
 
         long total = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM (" + UNION_SQL + ") movements " + WHERE_SQL, params, Long.class);
