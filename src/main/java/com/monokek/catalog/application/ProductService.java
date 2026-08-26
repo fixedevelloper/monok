@@ -278,7 +278,7 @@ public class ProductService implements ProductStockReceiver {
     private ProductDto toDto(Product product) {
         List<ModifierDto> modifiers = modifierProductRepository.findByProductId(product.getId()).stream()
                 .map(ModifierProduct::getModifier)
-                .map(m -> new ModifierDto(m.getId(), m.getName(),
+                .map(m -> new ModifierDto(m.getId(), m.getName(), m.getType(), m.isRequired(), m.getMinSelect(), m.getMaxSelect(),
                         m.getItems().stream().map(i -> new ModifierDto.Item(i.getId(), i.getName(), i.getPrice())).toList()))
                 .toList();
 

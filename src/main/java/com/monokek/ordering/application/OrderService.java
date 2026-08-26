@@ -112,6 +112,7 @@ public class OrderService {
                 continue;
             }
 
+            validateModifierGroups(product, line.modifiers());
             OrderItem item = round.addItem(product.id(), null, line.qty(), product.price());
             addModifiers(item, line.modifiers());
 
@@ -200,6 +201,34 @@ public class OrderService {
         // to a dead order — see Order#assertOpen for the full failure mode.
         return orderRepository.findFirstByTableIdAndStatusNotInOrderByIdDesc(table.id(), List.of("paid", "cancelled"))
                 .orElseGet(() -> Order.openForTable(table.branchId(), table.id(), waiterUserId, cashierUserId));
+    }
+
+    /** Enforces every modifier group attached to {@code product} — same rule the admin configures
+     * on {@code Modifier} (required/minSelect/maxSelect), never trusted from the client any more
+     * than price is. Replaces what the POS used to only infer client-side (see {@code
+     * ProductCatalog.ModifierGroupSnapshot}'s own doc): a required accompaniment left unpicked, or
+     * a group's maxSelect exceeded, now fails the request server-side instead of only failing to
+     * render correctly in {@code ModifierModal.tsx}. */
+    private void validateModifierGroups(ProductCatalog.ProductSnapshot product, List<SendRoundRequest.ModifierLine> modifiers) {
+        List<SendRoundRequest.ModifierLine> lines = modifiers == null ? List.of() : modifiers;
+        Map<Long, Integer> qtyByGroup = new LinkedHashMap<>();
+        for (SendRoundRequest.ModifierLine line : lines) {
+            ProductCatalog.ModifierItemSnapshot modifierItem = productCatalog.findModifierItem(line.modifierItemId())
+                    .orElseThrow(() -> ApiException.badRequest("Modifier introuvable : " + line.modifierItemId()));
+            int qty = line.quantity() == null ? 1 : line.quantity();
+            qtyByGroup.merge(modifierItem.modifierGroupId(), qty, Integer::sum);
+        }
+
+        for (ProductCatalog.ModifierGroupSnapshot group : product.modifierGroups()) {
+            int selected = qtyByGroup.getOrDefault(group.id(), 0);
+            int effectiveMin = group.required() ? Math.max(group.minSelect(), 1) : group.minSelect();
+            if (selected < effectiveMin) {
+                throw ApiException.badRequest("Sélection requise pour \"" + group.name() + "\" (" + product.name() + ").");
+            }
+            if (group.maxSelect() != null && selected > group.maxSelect()) {
+                throw ApiException.badRequest("Trop d'options sélectionnées pour \"" + group.name() + "\" (" + product.name() + ").");
+            }
+        }
     }
 
     private void addModifiers(OrderItem item, List<SendRoundRequest.ModifierLine> modifiers) {
@@ -559,6 +588,7 @@ public class OrderService {
             throw ApiException.badRequest("Ce produit appartient à une autre branche.");
         }
 
+        validateModifierGroups(product, request.modifiers());
         OrderItem item = round.addItem(product.id(), null, request.qty(), product.price());
         addModifiers(item, request.modifiers());
 

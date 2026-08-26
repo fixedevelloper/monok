@@ -39,7 +39,17 @@ public class ModifierService {
 
     @Transactional
     public ModifierDto create(CreateModifierRequest request) {
-        Modifier modifier = Modifier.create(request.name());
+        Modifier modifier;
+        try {
+            modifier = Modifier.create(
+                    request.name(),
+                    request.type() == null ? Modifier.TYPE_SUPPLEMENT : request.type(),
+                    Boolean.TRUE.equals(request.required()),
+                    request.minSelect() == null ? 0 : request.minSelect(),
+                    request.maxSelect());
+        } catch (IllegalArgumentException e) {
+            throw ApiException.badRequest(e.getMessage());
+        }
         if (request.items() != null) {
             request.items().forEach(item -> modifier.addItem(item.name(), item.price()));
         }
@@ -50,6 +60,15 @@ public class ModifierService {
     public ModifierDto update(Long id, UpdateModifierRequest request) {
         Modifier modifier = findOrThrow(id);
         modifier.rename(request.name());
+        try {
+            modifier.configure(
+                    request.type() == null ? modifier.getType() : request.type(),
+                    request.required() == null ? modifier.isRequired() : request.required(),
+                    request.minSelect() == null ? modifier.getMinSelect() : request.minSelect(),
+                    request.maxSelect() == null ? modifier.getMaxSelect() : request.maxSelect());
+        } catch (IllegalArgumentException e) {
+            throw ApiException.badRequest(e.getMessage());
+        }
         return toDto(modifierRepository.save(modifier));
     }
 
@@ -83,6 +102,8 @@ public class ModifierService {
         List<ModifierDto.Item> items = modifier.getItems().stream()
                 .map(i -> new ModifierDto.Item(i.getId(), i.getName(), i.getPrice()))
                 .toList();
-        return new ModifierDto(modifier.getId(), modifier.getName(), items);
+        return new ModifierDto(
+                modifier.getId(), modifier.getName(), modifier.getType(), modifier.isRequired(),
+                modifier.getMinSelect(), modifier.getMaxSelect(), items);
     }
 }

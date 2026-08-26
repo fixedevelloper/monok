@@ -6,11 +6,13 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.time.Duration;
 import java.util.Set;
 import java.util.function.Supplier;
 
@@ -32,7 +34,14 @@ class HttpManagerAuthClient implements ManagerAuthClient {
     private final RestClient restClient;
 
     HttpManagerAuthClient(@Value("${app.identity.api-url}") String apiUrl) {
-        this.restClient = RestClient.builder().baseUrl(apiUrl).build();
+        // Same reasoning/bound as the sibling identity clients in this package (HttpUserDirectory,
+        // IdentityTokenClient): a slow/unreachable monokek-identity must fail the manager-PIN
+        // check within a few seconds, not hang the cashier's cancel/void request indefinitely —
+        // the default request factory has no timeout at all.
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(Duration.ofSeconds(3));
+        requestFactory.setReadTimeout(Duration.ofSeconds(5));
+        this.restClient = RestClient.builder().baseUrl(apiUrl).requestFactory(requestFactory).build();
     }
 
     @Override

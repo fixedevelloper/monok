@@ -54,7 +54,8 @@ public class RecipeService {
                 .orElse(null);
 
         var lines = recipe.getItems().stream()
-                .map(item -> new RecipeDto.Line(item.getIngredient().getName(), item.getQty(), item.getIngredient().getUnit().getName()))
+                .map(item -> new RecipeDto.Line(
+                        item.getIngredient().getId(), item.getIngredient().getName(), item.getQty(), item.getIngredient().getUnit().getName()))
                 .toList();
 
         return new RecipeDto(recipe.getId(), productName, lines);

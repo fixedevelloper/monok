@@ -3,11 +3,13 @@ package com.monokek.pms.internal;
 import com.monokek.common.ApiException;
 import com.monokek.pms.PmsClient;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.function.Supplier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
@@ -19,7 +21,15 @@ class PmsClientService implements PmsClient {
     private final RestClient restClient;
 
     PmsClientService(@Value("${app.pms.api-url}") String pmsApiUrl) {
-        this.restClient = RestClient.builder().baseUrl(pmsApiUrl).build();
+        // Bounded for the same reason as identity's HTTP clients: chargeToRoom() runs inline
+        // inside OrderService#finalizePayment (before any local payment state is touched, see
+        // its own doc) — the default request factory has no timeout at all, so a stalled/
+        // unreachable pms-modulith would hang the cashier's "Encaisser" click indefinitely
+        // instead of failing fast with "Le service hôtel (pms) est injoignable pour le moment.".
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(Duration.ofSeconds(3));
+        requestFactory.setReadTimeout(Duration.ofSeconds(5));
+        this.restClient = RestClient.builder().baseUrl(pmsApiUrl).requestFactory(requestFactory).build();
     }
 
     @Override
