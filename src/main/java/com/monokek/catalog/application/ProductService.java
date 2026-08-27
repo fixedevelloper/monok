@@ -189,13 +189,19 @@ public class ProductService implements ProductStockReceiver {
      * branch (same movement bookkeeping), except it never throws on insufficient stock: by the time
      * this runs the order is already paid and committed, so there's nothing left to roll back.
      * Instead it clamps at zero and says so in the movement's reason, which is a real signal (stock
-     * count is untrustworthy) rather than a swallowed failure. A no-op for a product that doesn't
-     * track stock, so callers never need to check {@link Product#isTrackStock()} themselves. */
+     * count is untrustworthy) rather than a swallowed failure. A no-op for a non-"storable" product
+     * (consumable/service never carry a real stock count) — deliberately keyed off {@code type}
+     * rather than {@link Product#isTrackStock()}: that flag is never actually set from the admin
+     * UI (neither {@code AddProductModal} nor {@code EditProductModal} send it), so every real
+     * product has it stuck at {@code false} — gating on it here silently no-op'd every sale. {@code
+     * type == "storable"} is the field the admin UI actually drives (it's what decides whether
+     * {@code stockCount} is even shown/sent), and it's the same "just act on stockCount, no extra
+     * gate" convention {@link #adjustStock}/{@link #receivePurchase} already follow. */
     @Override
     @Transactional
     public void deductForSale(Long productId, int qty, Long orderId, Long cashierUserId) {
         Product product = findOrThrow(productId);
-        if (!product.isTrackStock()) {
+        if (!"storable".equals(product.getType())) {
             return;
         }
         int before = product.getStockCount();
