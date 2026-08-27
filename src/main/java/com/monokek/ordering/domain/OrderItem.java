@@ -51,20 +51,36 @@ public class OrderItem extends Timestamps {
         item.variantId = variantId;
         item.qty = qty;
         item.price = unitPrice;
-        item.total = unitPrice.multiply(BigDecimal.valueOf(qty));
         item.status = "pending";
+        item.recalculateTotal();
         return item;
+    }
+
+    /** {@code price * qty}, plus every modifier's own {@code price * quantity} — modifiers are
+     * added AFTER the item itself (see {@code OrderService#addModifiers}, called once the item
+     * exists), so {@code total} can never be a one-shot value set at construction: it has to be
+     * recomputed every time either side changes. Previously only {@code price * qty} — a
+     * modifier's price was durably stored on {@code OrderItemModifier} (and shown correctly on
+     * the printed ticket, which reads modifiers separately) but never actually made it into the
+     * billed total (this field, which {@code Order#refreshTotals}/{@code OrderRound#totalRound}/
+     * order history all sum) — a real undercharge, not just a display gap. */
+    public void recalculateTotal() {
+        BigDecimal modifiersTotal = modifiers.stream()
+                .map(m -> m.getPrice().multiply(BigDecimal.valueOf(m.getQuantity())))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        this.total = price.multiply(BigDecimal.valueOf(qty)).add(modifiersTotal);
     }
 
     public OrderItemModifier addModifier(Long modifierItemId, BigDecimal price, int quantity) {
         OrderItemModifier modifier = OrderItemModifier.of(this, modifierItemId, price, quantity);
         modifiers.add(modifier);
+        recalculateTotal();
         return modifier;
     }
 
     /** Port of the qty-update branch of {@code OrderController::updateRoundItemQty}. */
     public void updateQty(int newQty) {
         this.qty = newQty;
-        this.total = price.multiply(BigDecimal.valueOf(newQty));
+        recalculateTotal();
     }
 }
